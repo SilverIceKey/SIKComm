@@ -41,6 +41,8 @@ val response = port.read(7)
 if (ModbusRtuMaster.isValidResponse(response)) {
     println("合法响应：${response.joinToString(" ") { "%02X".format(it) }}")
 }
+// 完成通信后记得关闭串口
+port.close()
 ```
 
 同样的逻辑也可以通过 `CommTask` 在 `CommBridge` 中调度完成：

@@ -32,4 +32,22 @@ class SerialPortIO(path: String) {
         input.read(buffer)
         return buffer
     }
+
+    /**
+     * Close all underlying streams and descriptor.
+     */
+    fun close() {
+        try {
+            input.close()
+        } catch (_: Exception) {
+        }
+        try {
+            output.close()
+        } catch (_: Exception) {
+        }
+        try {
+            pfd.close()
+        } catch (_: Exception) {
+        }
+    }
 }
