@@ -43,6 +43,17 @@ if (ModbusRtuMaster.isValidResponse(response)) {
 }
 ```
 
+同样的逻辑也可以通过 `CommTask` 在 `CommBridge` 中调度完成：
+
+```kotlin
+val bleManager = BleManager(appContext)
+CommBridge.initBle(bleManager)
+
+CommBridge.sendTask(
+    SerialTask("device1", "/dev/ttyS1", byteArrayOf(0x00))
+)
+```
+
 🧠 环境要求
 Android 7.0+
 
