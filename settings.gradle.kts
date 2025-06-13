@@ -21,3 +21,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "SIKComm"
 include(":app")
+include(":sikcomm")
