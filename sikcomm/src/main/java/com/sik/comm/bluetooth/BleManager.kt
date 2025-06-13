@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.asStateFlow
  * It does not hold any Activity or Fragment context.
  */
 class BleManager(applicationContext: Context) {
+    private val context = applicationContext.applicationContext
     private val adapter: BluetoothAdapter? = BluetoothAdapter.getDefaultAdapter()
     private val _scannedDevices = MutableStateFlow<List<BluetoothDevice>>(emptyList())
     val scannedDevices = _scannedDevices.asStateFlow()
@@ -18,5 +19,15 @@ class BleManager(applicationContext: Context) {
     fun startScan() {
         val list = adapter?.bondedDevices?.toList() ?: emptyList()
         _scannedDevices.value = list
+    }
+
+    /**
+     * Placeholder send implementation. In real code this would handle
+     * connecting and writing to the BLE characteristic identified by
+     * [mac].
+     */
+    fun send(mac: String, data: ByteArray): Boolean {
+        // No real BLE operations implemented yet
+        return adapter != null && mac.isNotEmpty() && data.isNotEmpty()
     }
 }
