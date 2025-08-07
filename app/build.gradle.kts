@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.sik.sikcomm"
+    namespace = "com.sik.comm_sample"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.sik.sikcomm"
+        applicationId = "com.sik.comm_sample"
         minSdk = 24
         targetSdk = 35
         versionCode = 1
