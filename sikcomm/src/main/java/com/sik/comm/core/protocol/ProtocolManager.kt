@@ -1,7 +1,9 @@
 package com.sik.comm.core.protocol
 
+import com.sik.comm.core.logger.DefaultProtocolLogger
 import com.sik.comm.core.model.CommMessage
 import com.sik.comm.core.model.ProtocolConfig
+import kotlinx.coroutines.withTimeout
 
 /**
  * ProtocolManager 是所有协议实例的统一调度中心。
@@ -57,8 +59,16 @@ object ProtocolManager {
      * @param msg 消息体
      * @return 响应消息
      */
-    suspend fun send(deviceId: String, msg: CommMessage): CommMessage {
-        return getProtocol(deviceId).send(deviceId, msg)
+    suspend fun send(deviceId: String, msg: CommMessage, timeoutMs: Long = 5000): CommMessage {
+        return try {
+            withTimeout(timeoutMs) {
+                getProtocol(deviceId).send(deviceId, msg)
+            }
+        } catch (e: Exception) {
+            // 通知插件/日志
+            DefaultProtocolLogger.onError(deviceId, e)
+            throw e
+        }
     }
 
     /**
