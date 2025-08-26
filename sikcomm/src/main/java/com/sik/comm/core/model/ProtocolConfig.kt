@@ -26,6 +26,10 @@ abstract class ProtocolConfig(
     val enableMock: Boolean = false
 ) {
 
+    init {
+        System.loadLibrary("sikcomm")
+    }
+
     /** 默认插件（由子类定义，常用于心跳、状态上报） */
     protected open val plugins: List<CommPlugin> = emptyList()
 
