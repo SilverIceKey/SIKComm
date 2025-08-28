@@ -1,7 +1,7 @@
 package com.sik.comm.impl_can
 
 internal class NativeCan {
-    companion object { init { System.loadLibrary("data") } }
+    companion object { init { System.loadLibrary("sikcomm") } }
 
     external fun openSocket(ifName: String): Int
     external fun setReadTimeoutMs(fd: Int, timeoutMs: Int): Int
