@@ -29,6 +29,42 @@ fun CommMessage.toSdoRequest(
     }
 }
 
+/**
+ * 将强类型 SdoRequest 转为通用 CommMessage。
+ *
+ * 用途：
+ * - 插件 onBeforeSend/onReceive 统一收/发消息对象
+ * - 方便拦截器链处理请求日志、Mock等
+ */
+fun SdoRequest.toCommMessage(): CommMessage = when (this) {
+    is SdoRequest.Read -> CommMessage(
+        command = SdoOp.READ_REQ.name,
+        payload = ByteArray(0), // 读请求没有负载
+        metadata = buildMap {
+            put(MetaKeys.NODE_ID, nodeId)
+            put(MetaKeys.INDEX, index)
+            put(MetaKeys.SUBINDEX, subIndex)
+            canIdOverride?.let { put(MetaKeys.CAN_ID, it) }
+            put(MetaKeys.TIMEOUT, timeoutMs)
+            put(MetaKeys.IS_READ, true)
+        }
+    )
+
+    is SdoRequest.Write -> CommMessage(
+        command = SdoOp.WRITE_REQ.name,
+        payload = payload, // 写请求携带真实数据
+        metadata = buildMap {
+            put(MetaKeys.NODE_ID, nodeId)
+            put(MetaKeys.INDEX, index)
+            put(MetaKeys.SUBINDEX, subIndex)
+            put(MetaKeys.SIZE, size)
+            canIdOverride?.let { put(MetaKeys.CAN_ID, it) }
+            put(MetaKeys.TIMEOUT, timeoutMs)
+            put(MetaKeys.IS_READ, false)
+        }
+    )
+}
+
 fun SdoResponse.toCommMessage(): CommMessage = when (this) {
     is SdoResponse.ReadData -> CommMessage(
         command = SdoOp.READ_RSP.name,
