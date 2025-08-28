@@ -109,8 +109,7 @@ class CanProtocol(
                 runCatching {
                     p.onStateChanged(
                         CanPluginScopes.scope(
-                            dev.config,
-                            ProtocolState.DISCONNECTED
+                            dev.config, ProtocolState.DISCONNECTED
                         )
                     )
                 }
@@ -134,7 +133,8 @@ class CanProtocol(
                 runCatching {
                     p.onBeforeSend(
                         CanPluginScopes.scope(
-                            cfg, DeviceStateCenter.getState(deviceId),
+                            cfg,
+                            DeviceStateCenter.getState(deviceId),
                             CommMessage(SdoOp.READ_REQ.name, ByteArray(0), emptyMap()) // 仅用于回调埋点
                         )
                     )
@@ -148,12 +148,7 @@ class CanProtocol(
             val frame = when (req) {
                 is SdoRequest.Read -> buildReadSdo(sdo, canId, req.index, req.subIndex)
                 is SdoRequest.Write -> buildWriteSdo(
-                    sdo,
-                    canId,
-                    req.index,
-                    req.subIndex,
-                    req.payload,
-                    req.size
+                    sdo, canId, req.index, req.subIndex, req.payload, req.size
                 )
             }
             dev.io.write(frame)
@@ -168,9 +163,7 @@ class CanProtocol(
                 runCatching {
                     p.onReceive(
                         CanPluginScopes.scope(
-                            cfg,
-                            DeviceStateCenter.getState(deviceId),
-                            rsp.toCommMessage()
+                            cfg, DeviceStateCenter.getState(deviceId), rsp.toCommMessage()
                         )
                     )
                 }
@@ -182,9 +175,22 @@ class CanProtocol(
     override suspend fun send(deviceId: String, msg: CommMessage): CommMessage {
         val dev = devices[deviceId] ?: error("Device[$deviceId] not connected.")
         val cfg = dev.config
-        val req = msg.toSdoRequest { Triple(cfg.defaultNodeId, cfg.txBaseId, cfg.rxBaseId) }
-        val rsp = send(deviceId, req)                 // 走强类型通路
-        return rsp.toCommMessage()                    // 兼容回传 CommMessage
+        val scope = InterceptorScope(deviceId, ProtocolType.CAN, cfg, msg)
+        val chain = InterceptorChain(scope, dev.interceptors) { finalMsg ->
+            val req = finalMsg.toSdoRequest {
+                Triple(
+                    // 优先取消息里的 nodeId，其次 deviceId@X，最后 defaultNodeId
+                    finalMsg.metaNum<Int>(MK.NODE_ID)
+                        ?: parseNodeIdFromDeviceId(cfg.deviceId)
+                        ?: cfg.defaultNodeId,
+                    cfg.txBaseId,
+                    cfg.rxBaseId
+                )
+            }
+            send(deviceId, req).toCommMessage()
+        }
+        // 从头启动链；返回最终响应
+        return chain.proceed(scope.message)
     }
 
     // —— 私有辅助 —— //
@@ -192,41 +198,6 @@ class CanProtocol(
     private fun requireCanConfig(deviceId: String): CanConfig {
         return (configs[deviceId]
             ?: error("CanConfig for deviceId=$deviceId not registered. Call CanProtocol.registerConfig()."))
-    }
-
-    /**
-     * 实际发送一帧/多帧并等待应答。
-     * @return 匹配到的响应 CommMessage
-     */
-    private suspend fun doSendAndAwait(dev: CanDevice, msg: CommMessage): CommMessage {
-        val cfg = dev.config
-        val sdo = cfg.sdo
-
-        val nodeId = msg.metaNum<Int>(MK.NODE_ID)
-            ?: parseNodeIdFromDeviceId(cfg.deviceId)
-            ?: cfg.defaultNodeId
-            ?: error("nodeId not provided. Put it in metadata['${MK.NODE_ID}'] or deviceId 'canX@<nodeId>' or CanConfig.defaultNodeId.")
-
-        val index    = msg.metaNum<Int>(MK.INDEX)    ?: error("metadata['${MK.INDEX}'] required.")
-        val subIndex = msg.metaNum<Int>(MK.SUBINDEX) ?: 0
-        val size     = msg.metaNum<Int>(MK.SIZE)     ?: 0
-        val isRead   = msg.metaBool(MK.IS_READ) ?: msg.command.equals("SDO_READ", true)
-
-        val canId = msg.metaNum<Int>(MK.CAN_ID) ?: (cfg.txBaseId + nodeId)
-        val key   = CanRequestKey(nodeId, index, subIndex)
-
-        // 组帧并发送
-        val frame = if (isRead)
-            buildReadSdo(sdo, canId, index, subIndex)
-        else
-            buildWriteSdo(sdo, canId, index, subIndex, msg.payload, size)
-
-        dev.io.write(frame)
-
-        // 等待强类型响应，然后再转 CommMessage 返回
-        val timeoutMs = msg.metaNum<Long>(MK.TIMEOUT) ?: 3000L
-        val rsp: SdoResponse = dev.router.await(key, timeoutMs)
-        return rsp.toCommMessage()
     }
 
 
@@ -240,12 +211,7 @@ class CanProtocol(
     }
 
     private fun buildWriteSdo(
-        sdo: SdoDialect,
-        canId: Int,
-        index: Int,
-        subIndex: Int,
-        payload: ByteArray,
-        size: Int
+        sdo: SdoDialect, canId: Int, index: Int, subIndex: Int, payload: ByteArray, size: Int
     ): CanFrame {
         require(size == 1 || size == 2 || size == 4) { "SDO write size must be 1/2/4 bytes." }
         require(payload.size >= size) { "payload length ${payload.size} < size $size" }
@@ -287,21 +253,26 @@ class CanProtocol(
         val cmd = frame.data[0].toInt() and 0xFF
 
         val index = CanUtils.getU16LE(frame.data, 1)
-        val sub   = frame.data[3].toInt() and 0xFF
+        val sub = frame.data[3].toInt() and 0xFF
 
         val candidates = listOf(cfg.rxBaseId, if (cfg.rxBaseId == 0x600) 0x580 else 0x600)
-        val nodeId = candidates.map { base -> frame.canId - base }
-            .firstOrNull { it in 0..0x7FF } ?: return
+        val nodeId =
+            candidates.map { base -> frame.canId - base }.firstOrNull { it in 0..0x7FF } ?: return
         val key = CanRequestKey(nodeId, index, sub)
 
         when (cmd) {
             sdo.WRITE_ACK -> {
                 dev.router.resolve(key, SdoResponse.WriteAck(nodeId, index, sub, frame.canId))
             }
+
             sdo.ERROR -> {
                 val abort = CanUtils.getU32LE(frame.data, 4).toLong() and 0xFFFF_FFFFL
-                dev.router.resolve(key, SdoResponse.Error(nodeId, index, sub, frame.canId, abort, frame.data.copyOf()))
+                dev.router.resolve(
+                    key,
+                    SdoResponse.Error(nodeId, index, sub, frame.canId, abort, frame.data.copyOf())
+                )
             }
+
             sdo.WRITE_1B, sdo.WRITE_2B, sdo.WRITE_4B -> {
                 val size = when (cmd) {
                     sdo.WRITE_1B -> 1
@@ -311,14 +282,18 @@ class CanProtocol(
                 val pl = ByteArray(size).also { System.arraycopy(frame.data, 4, it, 0, size) }
                 dev.router.resolve(key, SdoResponse.ReadData(nodeId, index, sub, frame.canId, pl))
             }
+
             else -> {
                 // 异步/广播；按需投递插件（如果你要保留）
                 dev.plugins.forEach { p ->
                     runCatching {
                         p.onReceive(
-                            CanPluginScopes.scope(cfg, DeviceStateCenter.getState(cfg.deviceId),
+                            CanPluginScopes.scope(
+                                cfg, DeviceStateCenter.getState(cfg.deviceId),
                                 // 仍可给插件一个兼容消息
-                                SdoResponse.ReadData(nodeId, index, sub, frame.canId, frame.data.copyOf()).toCommMessage()
+                                SdoResponse.ReadData(
+                                    nodeId, index, sub, frame.canId, frame.data.copyOf()
+                                ).toCommMessage()
                             )
                         )
                     }

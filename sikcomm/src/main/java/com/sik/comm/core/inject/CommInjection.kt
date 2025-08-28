@@ -3,6 +3,7 @@ package com.sik.comm.core.injection
 import com.sik.comm.core.interceptor.CommInterceptor
 import com.sik.comm.core.model.ProtocolConfig
 import com.sik.comm.core.plugin.CommPlugin
+import com.sik.comm.interceptors.LoggingInterceptor
 
 /**
  * 通信注入器（CommInjection）。
@@ -15,7 +16,7 @@ import com.sik.comm.core.plugin.CommPlugin
 object CommInjection {
 
     // 默认拦截器
-    private val defaultInterceptors = mutableListOf<CommInterceptor>()
+    private val defaultInterceptors = mutableListOf<CommInterceptor>(LoggingInterceptor())
 
     // 默认插件
     private val defaultPlugins = mutableListOf<CommPlugin>()
