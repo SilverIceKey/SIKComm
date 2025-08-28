@@ -65,11 +65,11 @@ fun SdoRequest.toCommMessage(): CommMessage = when (this) {
         command = SdoOp.READ_REQ.name,
         payload = ByteArray(0),
         metadata = buildMap {
-            put(MetaKeys.NODE_ID, nodeId)
-            put(MetaKeys.INDEX, index)
-            put(MetaKeys.SUBINDEX, subIndex)
+            put(MetaKeys.NODE_ID, this@toCommMessage.nodeId)
+            put(MetaKeys.INDEX, this@toCommMessage.index)
+            put(MetaKeys.SUBINDEX, this@toCommMessage.subIndex)
             canIdOverride?.let { put(MetaKeys.CAN_ID, it) }
-            put(MetaKeys.TIMEOUT, timeoutMs)
+            put(MetaKeys.TIMEOUT, this@toCommMessage.timeoutMs)
             put(MetaKeys.IS_READ, true)
         }
     )
@@ -77,12 +77,12 @@ fun SdoRequest.toCommMessage(): CommMessage = when (this) {
         command = SdoOp.WRITE_REQ.name,
         payload = payload,
         metadata = buildMap {
-            put(MetaKeys.NODE_ID, nodeId)
-            put(MetaKeys.INDEX, index)
-            put(MetaKeys.SUBINDEX, subIndex)
-            put(MetaKeys.SIZE, size)
+            put(MetaKeys.NODE_ID, this@toCommMessage.nodeId)
+            put(MetaKeys.INDEX, this@toCommMessage.index)
+            put(MetaKeys.SUBINDEX, this@toCommMessage.subIndex)
+            put(MetaKeys.SIZE, this@toCommMessage.size)
             canIdOverride?.let { put(MetaKeys.CAN_ID, it) }
-            put(MetaKeys.TIMEOUT, timeoutMs)
+            put(MetaKeys.TIMEOUT, this@toCommMessage.timeoutMs)
             put(MetaKeys.IS_READ, false)
         }
     )
