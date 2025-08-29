@@ -1,5 +1,8 @@
 package com.sik.comm.impl_can
 
+/**
+ * SDO 请求/响应模型。保持你原有的语义与命名。
+ */
 sealed class SdoRequest {
     abstract val nodeId: Int
     abstract val index: Int

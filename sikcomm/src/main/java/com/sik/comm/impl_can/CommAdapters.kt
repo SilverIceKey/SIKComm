@@ -3,6 +3,13 @@ package com.sik.comm.impl_can
 import com.sik.comm.core.model.CommMessage
 import java.util.Locale
 
+// 命令别名（统一大小写）
+private val READ_REQ_ALIASES   = setOf("SDO_READ", "READ", "READ_REQ")
+private val WRITE_REQ_ALIASES  = setOf("SDO_WRITE", "WRITE", "WRITE_REQ")
+private val READ_RSP_ALIASES   = setOf("READ_RSP", "SDO_READ_RSP", "SDO_READ_DONE")
+private val WRITE_ACK_ALIASES  = setOf("WRITE_ACK", "SDO_WRITE_ACK", "SDO_WRITE_DONE")
+private val ERROR_ALIASES      = setOf("ERROR", "SDO_ERROR", "ABORT")
+
 /**
  * CommMessage -> SdoRequest
  * - 更宽容：智能识别读/写；写缺 SIZE 时尝试用 payload.size 推断；payload 超长自动裁剪
@@ -27,8 +34,8 @@ fun CommMessage.toSdoRequest(
     val cmd = command.orEmpty().uppercase(Locale.ROOT)
     val isRead = (meta[MetaKeys.IS_READ] as? Boolean)
         ?: when {
-            cmd == "SDO_READ" || cmd == "READ" || cmd == "READ_REQ" -> true
-            cmd == "SDO_WRITE" || cmd == "WRITE" || cmd == "WRITE_REQ" -> false
+            READ_REQ_ALIASES.contains(cmd)  -> true
+            WRITE_REQ_ALIASES.contains(cmd) -> false
             // 没带 SIZE，默认按“读”
             MetaKeys.SIZE !in meta -> true
             else -> false
@@ -121,7 +128,93 @@ fun SdoResponse.toCommMessage(): CommMessage = when (this) {
             MetaKeys.INDEX to index,
             MetaKeys.SUBINDEX to subIndex,
             MetaKeys.CAN_ID to canId,
-            "abort" to abortCode // 若你有 MetaKeys.ABORT 可替换
+            MetaKeys.ABORT to abortCode // ✅ 统一用字典键
         )
     )
+}
+
+/**
+ * CommMessage -> SdoResponse
+ * 规则：
+ * - 优先按 command 判定（READ_RSP / WRITE_ACK / ERROR）
+ * - 必要元数据：NODE_ID / INDEX / SUBINDEX / CAN_ID
+ * - ERROR 的 abortCode：优先读 metadata[ABORT]；否则若 payload>=4，用小端解析 UInt32
+ * - 无法判定时做宽容兜底（有 size+非空payload -> ReadData；空payload -> WriteAck；否则 -> Error）
+ */
+fun CommMessage.toSdoResponse(): SdoResponse {
+    val meta = metadata
+    val cmd  = command.orEmpty().uppercase(Locale.ROOT)
+
+    val nodeId  = meta.intOrThrow(MetaKeys.NODE_ID, "nodeId missing in metadata")
+    val index   = meta.intOrThrow(MetaKeys.INDEX,   "index missing in metadata")
+    val subIdx  = meta.intOrDefault(MetaKeys.SUBINDEX, 0)
+    val canId   = meta.intOrThrow(MetaKeys.CAN_ID,  "canId missing in metadata")
+
+    return when {
+        READ_RSP_ALIASES.contains(cmd) -> {
+            SdoResponse.ReadData(
+                nodeId   = nodeId,
+                index    = index,
+                subIndex = subIdx,
+                canId    = canId,
+                payload  = payload
+            )
+        }
+        WRITE_ACK_ALIASES.contains(cmd) -> {
+            SdoResponse.WriteAck(
+                nodeId   = nodeId,
+                index    = index,
+                subIndex = subIdx,
+                canId    = canId
+            )
+        }
+        ERROR_ALIASES.contains(cmd) -> {
+            val abort = meta.longOrNull(MetaKeys.ABORT)
+                ?: if (payload.size >= 4) payload.readUInt32LE(0) else 0L
+            SdoResponse.Error(
+                nodeId    = nodeId,
+                index     = index,
+                subIndex  = subIdx,
+                canId     = canId,
+                abortCode = abort,
+                raw       = payload
+            )
+        }
+        else -> { // 宽容兜底
+            val sizeMeta = meta.intOrNull(MetaKeys.SIZE)
+            when {
+                sizeMeta != null && payload.isNotEmpty() ->
+                    SdoResponse.ReadData(nodeId, index, subIdx, canId, payload)
+                payload.isEmpty() ->
+                    SdoResponse.WriteAck(nodeId, index, subIdx, canId)
+                else -> {
+                    val abort = meta.longOrNull(MetaKeys.ABORT) ?: if (payload.size >= 4) payload.readUInt32LE(0) else 0L
+                    SdoResponse.Error(nodeId, index, subIdx, canId, abort, payload)
+                }
+            }
+        }
+    }
+}
+
+// ===== Map/ByteArray 小工具（仅本文件可见）=====
+
+private fun Map<String, Any>.intOrNull(key: String): Int? =
+    (this[key] as? Number)?.toInt()
+
+private fun Map<String, Any>.longOrNull(key: String): Long? =
+    (this[key] as? Number)?.toLong()
+
+private fun Map<String, Any>.intOrDefault(key: String, def: Int): Int =
+    intOrNull(key) ?: def
+
+private fun Map<String, Any>.intOrThrow(key: String, msg: String): Int =
+    intOrNull(key) ?: error(msg)
+
+/** 小端解析无符号 32 位到 Long（保持正数语义） */
+private fun ByteArray.readUInt32LE(offset: Int = 0): Long {
+    require(size >= offset + 4) { "need >=4 bytes from offset=$offset, actual=$size" }
+    return ((this[offset].toLong() and 0xFF)) or
+            ((this[offset + 1].toLong() and 0xFF) shl 8) or
+            ((this[offset + 2].toLong() and 0xFF) shl 16) or
+            ((this[offset + 3].toLong() and 0xFF) shl 24)
 }
