@@ -1,6 +1,5 @@
 package com.sik.comm.impl_can
 
-import com.sik.comm.core.extension.metaBool
 import com.sik.comm.core.extension.metaNum
 import com.sik.comm.core.injection.CommInjection
 import com.sik.comm.core.interceptor.InterceptorChain
@@ -265,7 +264,7 @@ class CanProtocol(
                 dev.router.resolve(key, SdoResponse.WriteAck(nodeId, index, sub, frame.canId))
             }
 
-            sdo.ERROR -> {
+            sdo.WRITE_ERROR -> {
                 val abort = CanUtils.getU32LE(frame.data, 4).toLong() and 0xFFFF_FFFFL
                 dev.router.resolve(
                     key,
@@ -273,10 +272,10 @@ class CanProtocol(
                 )
             }
 
-            sdo.WRITE_1B, sdo.WRITE_2B, sdo.WRITE_4B -> {
+            sdo.READ_1B, sdo.READ_2B, sdo.READ_4B -> {
                 val size = when (cmd) {
-                    sdo.WRITE_1B -> 1
-                    sdo.WRITE_2B -> 2
+                    sdo.READ_1B -> 1
+                    sdo.READ_2B -> 2
                     else -> 4
                 }
                 val pl = ByteArray(size).also { System.arraycopy(frame.data, 4, it, 0, size) }
