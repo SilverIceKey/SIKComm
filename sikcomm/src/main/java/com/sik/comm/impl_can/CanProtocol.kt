@@ -143,31 +143,34 @@ class CanProtocol(
             // 目标 CAN-ID
             val canId = req.canIdOverride ?: (cfg.txBaseId + req.nodeId)
 
-            // 组帧 + 下发
-            val frame = when (req) {
-                is SdoRequest.Read -> buildReadSdo(sdo, canId, req.index, req.subIndex)
-                is SdoRequest.Write -> buildWriteSdo(
-                    sdo, canId, req.index, req.subIndex, req.payload, req.size
-                )
-            }
-            dev.io.write(frame)
-
-            // 注册 waiter 并等待
+            // 先注册等待者，避免 ACK 抢跑
             val key = CanRequestKey(req.nodeId, req.index, req.subIndex)
             dev.router.register(key)
-            val rsp = dev.router.await(key, req.timeoutMs)
-
-            // afterReceive 插件（可选）
-            dev.plugins.forEach { p ->
-                runCatching {
-                    p.onReceive(
-                        CanPluginScopes.scope(
-                            cfg, DeviceStateCenter.getState(deviceId), rsp.toCommMessage()
-                        )
-                    )
+            try {
+                // 组帧 + 下发
+                val frame = when (req) {
+                    is SdoRequest.Read  -> buildReadSdo(sdo, canId, req.index, req.subIndex)
+                    is SdoRequest.Write -> buildWriteSdo(sdo, canId, req.index, req.subIndex, req.payload, req.size)
                 }
+                dev.io.write(frame)
+
+                // 等待
+                val rsp = dev.router.await(key, req.timeoutMs)
+
+                // afterReceive 插件
+                dev.plugins.forEach { p ->
+                    runCatching {
+                        p.onReceive(
+                            CanPluginScopes.scope(
+                                cfg, DeviceStateCenter.getState(deviceId), rsp.toCommMessage()
+                            )
+                        )
+                    }
+                }
+                rsp
+            } finally {
+
             }
-            rsp
         }
     }
 
