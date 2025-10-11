@@ -12,8 +12,9 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import com.sik.comm.impl_ble.android.AndroidBlePlatformImpl
 import com.sik.comm.impl_ble.android.ScanOptions
-import com.sik.comm.impl_ble.scanAddedSince
+import com.sik.comm.impl_ble.waitForNewDevice
 import com.sik.comm_sample.PermissionUtils.hasPermission
+import com.sik.comm_sample.ble.BleConst
 import com.sik.sikcore.extension.setDebouncedClickListener
 import kotlinx.coroutines.launch
 
@@ -88,7 +89,13 @@ class MainActivity : AppCompatActivity() {
     private fun initBle() {
         val platform = AndroidBlePlatformImpl(this)
         lifecycleScope.launch {
-            val result = scanAddedSince(platform, 18_000, emptySet(), ScanOptions())
+            val result = waitForNewDevice(
+                platform,
+                ScanOptions(deviceNameExact = BleConst.BLE_LOCAL_NAME),
+                ambientMs = 800,
+                windowMs = 4000,
+                minRssi = -81
+            )
             Log.i("BLE", "result:${result}")
         }
     }
