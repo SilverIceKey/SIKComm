@@ -29,7 +29,7 @@ open class BleConfig(
     val notifyChar: UUID,
 
     // —— 链路参数 —— //
-    val expectMtu: Int? = 185,             // 期望 MTU；null 表示不主动请求
+    val expectMtu: Int? = 500,             // 期望 MTU；null 表示不主动请求
     val enableNotifyOnReady: Boolean = true,
 
     // —— 超时控制 —— //
@@ -61,3 +61,52 @@ open class BleConfig(
     protocolType = ProtocolType.BLE,
     enableMock = false
 )
+
+/** 基于现有 BleConfig 生成“绑定指定设备”的新配置 */
+fun BleConfig.copyFor(deviceId: String, mac: String): BleConfig =
+    BleConfig(
+        deviceId = deviceId,
+
+        // 设备发现（保留原过滤，但强制以 MAC 为主；名字/UUID 过滤只在扫描阶段用）
+        whitelist = setOf(mac),
+        deviceNameExact = this.deviceNameExact,
+        deviceNamePrefix = this.deviceNamePrefix,
+        serviceUuids = this.serviceUuids,
+        manufacturerId = this.manufacturerId,
+        manufacturerData = this.manufacturerData,
+        manufacturerMask = this.manufacturerMask,
+
+        // GATT 路由
+        service = this.service,
+        writeChar = this.writeChar,
+        notifyChar = this.notifyChar,
+
+        // 链路参数
+        expectMtu = this.expectMtu,
+        enableNotifyOnReady = this.enableNotifyOnReady,
+
+        // 超时
+        connectTimeoutMs = this.connectTimeoutMs,
+        discoverTimeoutMs = this.discoverTimeoutMs,
+        subscribeTimeoutMs = this.subscribeTimeoutMs,
+        writeTimeoutMs = this.writeTimeoutMs,
+        scanWindowMs = this.scanWindowMs,
+        totalScanBudgetMs = this.totalScanBudgetMs,
+
+        // 写入策略
+        preferWriteWithResponse = this.preferWriteWithResponse,
+        interChunkDelayMs = this.interChunkDelayMs,
+        maxInFlightChunks = this.maxInFlightChunks,
+        maxRetriesPerChunk = this.maxRetriesPerChunk,
+
+        // 并发上限
+        maxGlobalConnections = this.maxGlobalConnections,
+
+        // 请求-应答路由键
+        requestKeyOf = this.requestKeyOf,
+        notifyKeyOf = this.notifyKeyOf,
+
+        // 插件/拦截器
+        additionalPlugins = this.additionalPlugins,
+        additionalInterceptors = this.additionalInterceptors
+    )

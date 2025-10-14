@@ -39,32 +39,72 @@ class BleProtocol(
     }
 
     override fun connect(deviceId: String) {
-        val cfg = requireConfig(deviceId)
-        val injected = CommInjection.injectTo(cfg)
+        fun ensureRoute(cfg: BleConfig) {
+            requireNotNull(cfg.service) { "service UUID required" }
+            requireNotNull(cfg.writeChar) { "writeChar UUID required" }
+            requireNotNull(cfg.notifyChar) { "notifyChar UUID required" }
+        }
 
+        val cfg = requireConfig(deviceId)
+        ensureRoute(cfg)
+        val injected = CommInjection.injectTo(cfg)
         DeviceStateCenter.updateState(deviceId, ProtocolState.CONNECTING)
-        injected.plugins.forEach { p -> runCatching { p.onStateChanged(BlePluginScopes.scope(cfg, ProtocolState.CONNECTING)) } }
+        injected.plugins.forEach { p ->
+            runCatching {
+                p.onStateChanged(
+                    BlePluginScopes.scope(
+                        cfg,
+                        ProtocolState.CONNECTING
+                    )
+                )
+            }
+        }
 
         val io = ioFactory(cfg)
         // 扫描策略：若给定 whitelist，取其首；否则直接尝试（保持最小实现；更复杂策略可在外部先定位 MAC 再传入）
-        val mac = cfg.whitelist.firstOrNull() ?: error("BleConfig.whitelist must contain target MAC for connect()")
+        val mac = cfg.whitelist.firstOrNull()
+            ?: error("BleConfig.whitelist must contain target MAC for connect()")
 
         // 用连接池控制并发
         kotlinx.coroutines.runBlocking {
             pool.withPermit {
                 io.open(mac)
                 DeviceStateCenter.updateState(deviceId, ProtocolState.CONNECTED)
-                injected.plugins.forEach { p -> runCatching { p.onStateChanged(BlePluginScopes.scope(cfg, ProtocolState.CONNECTED)) } }
+                injected.plugins.forEach { p ->
+                    runCatching {
+                        p.onStateChanged(
+                            BlePluginScopes.scope(
+                                cfg,
+                                ProtocolState.CONNECTED
+                            )
+                        )
+                    }
+                }
 
                 io.discover()
                 if (cfg.expectMtu != null) io.requestMtu(cfg.expectMtu)
-                if (cfg.enableNotifyOnReady) io.subscribe(GattRoute(cfg.service, cfg.writeChar, cfg.notifyChar))
+                if (cfg.enableNotifyOnReady) io.subscribe(
+                    GattRoute(
+                        cfg.service,
+                        cfg.writeChar,
+                        cfg.notifyChar
+                    )
+                )
 
                 val dev = BleDevice(cfg, io, injected.interceptors, injected.plugins)
                 devices[deviceId] = dev
 
                 DeviceStateCenter.updateState(deviceId, ProtocolState.READY)
-                injected.plugins.forEach { p -> runCatching { p.onStateChanged(BlePluginScopes.scope(cfg, ProtocolState.READY)) } }
+                injected.plugins.forEach { p ->
+                    runCatching {
+                        p.onStateChanged(
+                            BlePluginScopes.scope(
+                                cfg,
+                                ProtocolState.READY
+                            )
+                        )
+                    }
+                }
                 logger.onConnect(deviceId)
             }
         }
@@ -74,14 +114,27 @@ class BleProtocol(
         devices.remove(deviceId)?.let { dev ->
             runCatching { dev.io.close() }
             DeviceStateCenter.updateState(deviceId, ProtocolState.DISCONNECTED)
-            dev.plugins.forEach { p -> runCatching { p.onStateChanged(BlePluginScopes.scope(dev.config, ProtocolState.DISCONNECTED)) } }
+            dev.plugins.forEach { p ->
+                runCatching {
+                    p.onStateChanged(
+                        BlePluginScopes.scope(
+                            dev.config,
+                            ProtocolState.DISCONNECTED
+                        )
+                    )
+                }
+            }
             logger.onDisconnect(deviceId)
         }
     }
 
     override fun isConnected(deviceId: String): Boolean {
         val d = devices[deviceId] ?: return false
-        return try { kotlinx.coroutines.runBlocking { d.io.isOpen() } } catch (_: Throwable) { false }
+        return try {
+            kotlinx.coroutines.runBlocking { d.io.isOpen() }
+        } catch (_: Throwable) {
+            false
+        }
     }
 
     override suspend fun send(deviceId: String, msg: CommMessage): CommMessage {
@@ -124,23 +177,38 @@ class BleProtocol(
                     dev.router.resolve(key, n)
                     if (key == reqKey) break
                 }
-                try { dev.router.await(reqKey, timeout) } catch (t: Throwable) { throw t }
+                try {
+                    dev.router.await(reqKey, timeout)
+                } catch (t: Throwable) {
+                    throw t
+                }
             } else null
 
             // 4) afterReceive 插件
             rsp?.let {
                 dev.plugins.forEach { p ->
                     runCatching {
-                        p.onReceive(BlePluginScopes.scope(cfg, DeviceStateCenter.getState(deviceId), CommMessage("BLE_RSP", it, emptyMap())))
+                        p.onReceive(
+                            BlePluginScopes.scope(
+                                cfg,
+                                DeviceStateCenter.getState(deviceId),
+                                CommMessage("BLE_RSP", it, emptyMap())
+                            )
+                        )
                     }
                 }
             }
             // 返回 CommMessage（若无应答则返回空载荷）
-            if (rsp != null) CommMessage("BLE_RSP", rsp, emptyMap()) else CommMessage("BLE_SENT", ByteArray(0), emptyMap())
+            if (rsp != null) CommMessage("BLE_RSP", rsp, emptyMap()) else CommMessage(
+                "BLE_SENT",
+                ByteArray(0),
+                emptyMap()
+            )
         }
         return chain.proceed(scope.message)
     }
 
     private fun requireConfig(deviceId: String): BleConfig =
-        configs[deviceId] ?: error("BleConfig for deviceId=$deviceId not registered. Call BleProtocol.registerConfig().")
+        configs[deviceId]
+            ?: error("BleConfig for deviceId=$deviceId not registered. Call BleProtocol.registerConfig().")
 }

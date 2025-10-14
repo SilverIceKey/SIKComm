@@ -5,5 +5,5 @@ import java.util.UUID
 data class GattRoute(
     val service: UUID,
     val writeChar: UUID,
-    val notifyChar: UUID
+    val notifyChar: UUID,
 )

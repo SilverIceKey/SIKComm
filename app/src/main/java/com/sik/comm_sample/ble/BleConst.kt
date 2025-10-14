@@ -1,5 +1,7 @@
 package com.sik.comm_sample.ble
 
+import java.util.UUID
+
 /**
  * 指令，均为未加密或解密后的
  */
@@ -13,9 +15,9 @@ object BleConst {
     const val MTU = 500
     const val SCAN_TIMEOUT = 20_000L
 
-    const val SERVICE_UUID = "0000FEE7-0000-1000-8000-00805F9B34FB"
-    const val INDICATE_UUID = "0000FED1-0000-1000-8000-00805F9B34FB"
-    const val WRITE_UUID = "0000FED2-0000-1000-8000-00805F9B34FB"
+    val SERVICE_UUID = UUID.fromString("0000FEE7-0000-1000-8000-00805F9B34FB")
+    val INDICATE_UUID = UUID.fromString("0000FED1-0000-1000-8000-00805F9B34FB")
+    val WRITE_UUID = UUID.fromString("0000FED2-0000-1000-8000-00805F9B34FB")
 
     val STATUS_WORK = byteArrayOf(0x01)     // 工作模式
     val STATUS_READY = byteArrayOf(0x02)    // 待机模式
