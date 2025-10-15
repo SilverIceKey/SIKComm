@@ -5,7 +5,7 @@ import java.io.Closeable
 /**
  * Modbus 传输层抽象，屏蔽 RS485 与 TCP 的差异。
  */
-internal interface ModbusTransport : Closeable {
+interface ModbusTransport : Closeable {
 
     /** 打开底层连接。 */
     fun open()

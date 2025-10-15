@@ -59,7 +59,6 @@ open class BleConfig(
 ) : ProtocolConfig(
     deviceId = deviceId,
     protocolType = ProtocolType.BLE,
-    enableMock = false
 )
 
 /** 基于现有 BleConfig 生成“绑定指定设备”的新配置 */

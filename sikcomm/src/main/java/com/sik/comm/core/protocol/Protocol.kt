@@ -1,6 +1,8 @@
 package com.sik.comm.core.protocol
 
 import com.sik.comm.core.model.CommMessage
+import com.sik.comm.core.model.TxPlan
+import com.sik.comm.core.policy.ChainPolicy
 
 /**
  * 通信协议的统一接口。
@@ -17,6 +19,11 @@ interface Protocol {
      * @return 响应消息体（通常是设备回复）
      */
     suspend fun send(deviceId: String, msg: CommMessage): CommMessage
+
+    /**
+     * 多包链式发送：按 plan.frames 顺序写出，每步交给 policy 决定如何等待/校验/是否继续。
+     */
+    suspend fun sendChain(deviceId: String, plan: TxPlan, policy: ChainPolicy): List<CommMessage>
 
     /**
      * 主动连接指定设备。

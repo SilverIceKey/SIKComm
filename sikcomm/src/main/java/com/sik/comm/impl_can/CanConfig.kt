@@ -54,5 +54,4 @@ open class CanConfig(
 ) : ProtocolConfig(
     deviceId = deviceId,
     protocolType = ProtocolType.CAN,
-    enableMock = false
 )

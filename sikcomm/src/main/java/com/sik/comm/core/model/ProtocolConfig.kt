@@ -23,7 +23,11 @@ abstract class ProtocolConfig(
     val protocolType: ProtocolType,
 
     /** 是否启用 Mock 拦截（常用于调试或测试阶段） */
-    val enableMock: Boolean = false
+    val enableMock: Boolean = false,
+    /**
+     * 默认超时时间
+     */
+    val defaultTimeoutMs: Long = 5000L
 ) {
 
     init {

@@ -34,5 +34,5 @@ open class ModbusConfig(
 ) : ProtocolConfig(
     deviceId = deviceId,
     protocolType = ProtocolType.RS485,
-    enableMock = enableMock
+    enableMock = enableMock,
 )

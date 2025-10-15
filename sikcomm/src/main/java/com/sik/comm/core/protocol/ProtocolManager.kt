@@ -4,47 +4,34 @@ import com.sik.comm.core.logger.DefaultProtocolLogger
 import com.sik.comm.core.model.CommMessage
 import com.sik.comm.core.model.ProtocolConfig
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
-/**
- * ProtocolManager 是所有协议实例的统一调度中心。
- * 它根据设备配置（ProtocolConfig）分配协议实例，
- * 并负责维护设备的连接状态和收发操作。
- */
 object ProtocolManager {
 
-    /** 协议实例注册表，按协议类型存储 */
     private val protocolMap: MutableMap<ProtocolType, Protocol> = mutableMapOf()
-
-    /** 每个设备 ID 对应的协议类型（根据初始化配置决定） */
     private val deviceProtocolTypeMap: MutableMap<String, ProtocolType> = mutableMapOf()
 
-    /**
-     * 注册某一协议类型的实现类（在应用初始化时调用）。
-     *
-     * @param type 协议类型
-     * @param impl 协议实现类实例（通常为单例）
-     */
+    // 新增：设备完整配置缓存 & 连接态
+    private val deviceConfigMap: MutableMap<String, ProtocolConfig> = mutableMapOf()
+    private val deviceConnectedMap: MutableMap<String, Boolean> = mutableMapOf()
+
+    // 新增：设备级串行锁（避免交叉帧）
+    private val deviceMutex: MutableMap<String, Mutex> = mutableMapOf()
+
+    // 缺省超时兜底（用户传 <=0 时使用）
+    private const val DEFAULT_TIMEOUT_MS: Long = 5000
+
     fun register(type: ProtocolType, impl: Protocol) {
         protocolMap[type] = impl
     }
 
-    /**
-     * 初始化设备连接配置。
-     * 应在设备首次接入前调用，决定其使用的协议类型。
-     *
-     * @param config 协议配置（包含设备 ID 和协议类型）
-     */
     fun bindDeviceConfig(config: ProtocolConfig) {
         deviceProtocolTypeMap[config.deviceId] = config.protocolType
+        deviceConfigMap[config.deviceId] = config
+        deviceMutex.getOrPut(config.deviceId) { Mutex() }
     }
 
-    /**
-     * 获取指定设备当前使用的协议实现类。
-     *
-     * @param deviceId 设备唯一 ID
-     * @return 协议实现类实例
-     * @throws IllegalStateException 若设备尚未绑定协议类型或协议未注册
-     */
     fun getProtocol(deviceId: String): Protocol {
         val type = deviceProtocolTypeMap[deviceId]
             ?: error("Device [$deviceId] is not bound to any ProtocolType.")
@@ -52,43 +39,57 @@ object ProtocolManager {
             ?: error("Protocol for type [$type] not registered.")
     }
 
-    /**
-     * 向指定设备发送消息。
-     *
-     * @param deviceId 设备 ID
-     * @param msg 消息体
-     * @return 响应消息
-     */
-    suspend fun send(deviceId: String, msg: CommMessage, timeoutMs: Long = 5000): CommMessage {
-        return try {
-            withTimeout(timeoutMs) {
-                getProtocol(deviceId).send(deviceId, msg)
+    private fun getDeviceDefaultTimeout(deviceId: String): Long {
+        val cfg = deviceConfigMap[deviceId]
+        // 若你的 ProtocolConfig 有更具体的超时字段，可在此读取
+        return (cfg?.defaultTimeoutMs ?: 0L).takeIf { it > 0 } ?: DEFAULT_TIMEOUT_MS
+    }
+
+    suspend fun send(deviceId: String, msg: CommMessage, timeoutMs: Long = DEFAULT_TIMEOUT_MS): CommMessage {
+        val realTimeout = (timeoutMs.takeIf { it > 0 } ?: getDeviceDefaultTimeout(deviceId))
+        val mutex = deviceMutex.getOrPut(deviceId) { Mutex() }
+        return mutex.withLock {
+            try {
+                withTimeout(realTimeout) {
+                    getProtocol(deviceId).send(deviceId, msg)
+                }
+            } catch (e: Exception) {
+                DefaultProtocolLogger.onError(deviceId, e)
+                throw e
             }
+        }
+    }
+
+    fun connect(deviceId: String) {
+        val proto = getProtocol(deviceId)
+        // 幂等：已连就不重复
+        if (deviceConnectedMap[deviceId] == true) return
+        try {
+            proto.connect(deviceId)
+            deviceConnectedMap[deviceId] = true
         } catch (e: Exception) {
-            // 通知插件/日志
             DefaultProtocolLogger.onError(deviceId, e)
             throw e
         }
     }
 
-    /**
-     * 主动连接指定设备。
-     */
-    fun connect(deviceId: String) {
-        getProtocol(deviceId).connect(deviceId)
-    }
-
-    /**
-     * 主动断开设备连接。
-     */
     fun disconnect(deviceId: String) {
-        getProtocol(deviceId).disconnect(deviceId)
+        val proto = getProtocol(deviceId)
+        if (deviceConnectedMap[deviceId] != true) return
+        try {
+            proto.disconnect(deviceId)
+        } catch (e: Exception) {
+            DefaultProtocolLogger.onError(deviceId, e)
+        } finally {
+            deviceConnectedMap[deviceId] = false
+        }
     }
 
-    /**
-     * 判断设备是否已连接。
-     */
     fun isConnected(deviceId: String): Boolean {
-        return getProtocol(deviceId).isConnected(deviceId)
+        return try {
+            getProtocol(deviceId).isConnected(deviceId)
+        } catch (_: Exception) {
+            false
+        }
     }
 }

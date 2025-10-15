@@ -9,6 +9,8 @@ import com.sik.comm.core.logger.DefaultProtocolLogger
 import com.sik.comm.core.logger.ProtocolLogger
 import com.sik.comm.core.model.CommMessage
 import com.sik.comm.core.model.ProtocolState
+import com.sik.comm.core.model.TxPlan
+import com.sik.comm.core.policy.ChainPolicy
 import com.sik.comm.core.protocol.Protocol
 import com.sik.comm.core.protocol.ProtocolType
 import com.sik.comm.core.state.DeviceStateCenter
@@ -206,6 +208,15 @@ class BleProtocol(
             )
         }
         return chain.proceed(scope.message)
+    }
+
+    override suspend fun sendChain(
+        deviceId: String,
+        plan: TxPlan,
+        policy: ChainPolicy
+    ): List<CommMessage> {
+        logger.onError(deviceId, UnsupportedOperationException("BleProtocol.sendChain() not supported"))
+        return emptyList()
     }
 
     private fun requireConfig(deviceId: String): BleConfig =

@@ -7,7 +7,7 @@ import com.sik.comm.core.plugin.PluginScope
 /**
  * 便捷构造 Modbus 插件使用的 Scope。
  */
-internal object ModbusPluginScopes {
+object ModbusPluginScopes {
     fun scope(config: ModbusConfig, state: ProtocolState, message: CommMessage? = null): PluginScope {
         return PluginScope(
             deviceId = config.deviceId,

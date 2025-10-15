@@ -17,5 +17,5 @@ open class MockConfig(
 ) : ProtocolConfig(
     deviceId = deviceId,
     protocolType = ProtocolType.MOCK,
-    enableMock = true
+    enableMock = true,
 )
