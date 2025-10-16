@@ -151,3 +151,6 @@ SIKComm/
 
 ---
 
+- 2025年10月16之前版本（tag: 1.0.16）使用 MIT License
+- 自 1.0.17 起，改用 Apache License 2.0
+

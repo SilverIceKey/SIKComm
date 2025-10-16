@@ -1,8 +1,7 @@
 package com.sik.comm.impl_ble
 
 import android.content.Context
-import com.sik.comm.core.extension.metaNum
-import com.sik.comm.core.injection.CommInjection
+import com.sik.comm.core.inject.CommInjection
 import com.sik.comm.core.interceptor.InterceptorChain
 import com.sik.comm.core.interceptor.InterceptorScope
 import com.sik.comm.core.logger.DefaultProtocolLogger
@@ -14,7 +13,6 @@ import com.sik.comm.core.policy.ChainPolicy
 import com.sik.comm.core.protocol.Protocol
 import com.sik.comm.core.protocol.ProtocolType
 import com.sik.comm.core.state.DeviceStateCenter
-import com.sik.comm.core.task.DeviceTaskManager
 import com.sik.comm.impl_ble.io.AndroidGattIo
 import com.sik.comm.impl_ble.io.BleIo
 import com.sik.comm.impl_ble.internal.ConnectionPool

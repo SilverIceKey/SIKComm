@@ -1,7 +1,7 @@
 package com.sik.comm.impl_can
 
 import com.sik.comm.core.extension.metaNum
-import com.sik.comm.core.injection.CommInjection
+import com.sik.comm.core.inject.CommInjection
 import com.sik.comm.core.interceptor.InterceptorChain
 import com.sik.comm.core.interceptor.InterceptorScope
 import com.sik.comm.core.logger.DefaultProtocolLogger
