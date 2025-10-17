@@ -1,11 +1,14 @@
 package com.sik.comm_sample
 
 import android.os.Bundle
+import android.util.Log
 import android.widget.Button
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import com.sik.comm.codec.PassThroughCodec
+import com.sik.comm.core.model.CommMessage
 import com.sik.comm.core.model.ProtocolConfig
 import com.sik.comm.core.protocol.ProtocolManager
 import com.sik.comm.core.protocol.ProtocolType
@@ -14,6 +17,7 @@ import com.sik.comm.impl_modbus.ModbusProtocol
 import com.sik.comm.impl_modbus.easy.ModbusClient
 import com.sik.sikcore.extension.setDebouncedClickListener
 import com.sik.sikcore.thread.ThreadUtils
+import kotlinx.coroutines.delay
 
 
 class MainActivity : AppCompatActivity() {
@@ -35,28 +39,21 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    @OptIn(ExperimentalStdlibApi::class)
     private suspend fun initBle() {
         // 1) 注册配置（原有方式）
         val cfg = ModbusConfig(
             deviceId = "PLC_A",
-            portName = "/dev/ttyS3",  // 或 "tcp://192.168.1.100:502"
+            portName = "/dev/ttyS2",  // 或 "tcp://192.168.1.100:502"
             baudRate = 115200,
-            defaultUnitId = 1
+            defaultUnitId = null,
+            codec = PassThroughCodec()
         )
         val proto = ModbusProtocol().apply { registerConfig(cfg) }
         proto.connect(cfg.deviceId)
-
-        // 2) 更“人话”的客户端
-        val client = ModbusClient(
-            protocol = proto,
-            deviceId = cfg.deviceId,
-            defaultUnitId = cfg.defaultUnitId ?: 1
-        )
-
-        // 3) 读保持寄存器 0x03
-        val regs: ShortArray = client.readHoldingRegisters(addr = 0x0000, qty = 4)
-
-        // 4) 写单寄存器 0x06
-        client.writeSingleRegister(addr = 0x0001, value = 1234)
+        delay(200)
+        val rsp = proto.send("PLC_A", CommMessage("PLC_A_READ",
+            byteArrayOf(0xEF.toByte(),0xAA.toByte(),0x30.toByte(),0x00.toByte(),0x00.toByte(),0x30.toByte())))
+        Log.i("RSP","${rsp.payload.toHexString()}")
     }
 }

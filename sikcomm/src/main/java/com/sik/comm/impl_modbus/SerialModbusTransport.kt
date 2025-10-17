@@ -9,7 +9,7 @@ import java.io.IOException
 import java.util.concurrent.TimeoutException
 
 /**
- * 基于串口（RS485）的 Modbus 传输层实现。
+ * 基于串口（RS485）的 Modbus 传输层实现（优先使用 JNI + su 提权）。
  */
 internal class SerialModbusTransport(
     private val config: ModbusConfig
@@ -17,11 +17,32 @@ internal class SerialModbusTransport(
 
     private var input: FileInputStream? = null
     private var output: FileOutputStream? = null
+    private var nativePort: SerialPortNative? = null
 
     override fun open() {
         if (isOpen()) return
         val portFile = File(config.portName)
         require(portFile.exists()) { "Serial port ${config.portName} not found" }
+
+        // 1) JNI + su 提权优先
+        runCatching {
+            val sp = SerialPortNative()
+            val ok = sp.openAndInit(
+                path = config.portName,
+                baudRate = config.baudRate,
+                dataBits = 8, parity = 0, stopBits = 1,
+                flags = 0,       // 最高位可作为 NONBLOCK 标志，如果你想用的话
+                trySu = true
+            )
+            if (ok) {
+                nativePort = sp
+                input = sp.inputStream
+                output = sp.outputStream
+                return
+            }
+        }.onFailure { /* 忽略，走回退 */ }
+
+        // 2) 回退纯 Java（可能因权限失败；保留以兼容无 su 的环境）
         try {
             input = FileInputStream(portFile)
             output = FileOutputStream(portFile)
@@ -34,9 +55,7 @@ internal class SerialModbusTransport(
         }
     }
 
-    override fun isOpen(): Boolean {
-        return input != null && output != null
-    }
+    override fun isOpen(): Boolean = input != null && output != null
 
     override fun write(data: ByteArray) {
         val out = output ?: error("Serial port not opened.")
@@ -50,76 +69,39 @@ internal class SerialModbusTransport(
         val buf = ByteArrayOutputStream()
         val start = SystemClock.elapsedRealtime()
         val hardDeadline = start + timeoutMs
-
-        // 当有“新字节”时，滑动这个空闲截止时间
         var byteIdleDeadline = start + silenceGapMs.coerceAtLeast(1)
-
-        // 读块大小稍微大一点，减少 JNI/系统调用开销
         val temp = ByteArray(4096)
 
         while (true) {
             val now = SystemClock.elapsedRealtime()
-
-            // 1) 先看整体截止：到点了
             if (now >= hardDeadline) {
-                // 有数据就“流式返回”当前块；完全没数据才算真正超时
-                if (buf.size() == 0) {
-                    throw TimeoutException("Modbus serial read timeout: ${timeoutMs}ms")
-                } else {
-                    break
-                }
+                if (buf.size() == 0) throw TimeoutException("Modbus serial read timeout: ${timeoutMs}ms")
+                else break
             }
 
-            val available = try {
-                inp.available()
-            } catch (io: IOException) {
-                throw io
-            }
-
+            val available = try { inp.available() } catch (io: IOException) { throw io }
             if (available > 0) {
                 val toRead = available.coerceAtMost(temp.size)
                 val read = inp.read(temp, 0, toRead)
                 if (read > 0) {
                     buf.write(temp, 0, read)
-                    // 有进展：滑动字节空闲截止
                     byteIdleDeadline = SystemClock.elapsedRealtime() + silenceGapMs.coerceAtLeast(1)
-
-                    // 如果调用方告诉了期望长度，达到就直接返回
-                    if (expectedSize != null && buf.size() >= expectedSize) {
-                        break
-                    }
-
-                    // 继续读，尽可能把当前缓冲的字节吃干净（不要立刻 sleep）
+                    if (expectedSize != null && buf.size() >= expectedSize) break
                     continue
                 } else if (read < 0) {
-                    // 流关闭：把已有数据返回；没有就算超时
-                    if (buf.size() == 0) {
-                        throw TimeoutException("Serial input closed while waiting for data")
-                    } else {
-                        break
-                    }
+                    if (buf.size() == 0) throw TimeoutException("Serial input closed while waiting for data")
+                    else break
                 }
             }
 
-            // 2) 没有新字节：看看是否达到“字节空闲截止”
-            if (buf.size() > 0 && SystemClock.elapsedRealtime() >= byteIdleDeadline) {
-                // 认为一个“帧块”结束（或当前可交付的一坨数据）→ 返回
-                break
-            }
-
-            // 3) 没数据还没到任何截止 → 轻量休眠，别空转
-            try {
-                Thread.sleep(1)
-            } catch (ie: InterruptedException) {
-                Thread.currentThread().interrupt()
-                break
+            if (buf.size() > 0 && SystemClock.elapsedRealtime() >= byteIdleDeadline) break
+            try { Thread.sleep(1) } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt(); break
             }
         }
 
         val data = buf.toByteArray()
-        if (data.isEmpty()) {
-            throw TimeoutException("Modbus serial read timeout: ${timeoutMs}ms")
-        }
+        if (data.isEmpty()) throw TimeoutException("Modbus serial read timeout: ${timeoutMs}ms")
         return data
     }
 
@@ -128,5 +110,7 @@ internal class SerialModbusTransport(
         runCatching { output?.close() }
         input = null
         output = null
+        runCatching { nativePort?.close() }
+        nativePort = null
     }
 }
