@@ -295,11 +295,14 @@ class ModbusProtocol(
      * - 不走 Modbus 编解码，直接原样把 payload 写到传输层。
      * - 仍然发出插件事件（onBeforeSend/onReceive/onError）和状态通知。
      */
-    override suspend fun sendChain(deviceId: String, plan: TxPlan, policy: ChainPolicy): List<CommMessage> {
+    override suspend fun sendChain(
+        deviceId: String,
+        plan: TxPlan,
+        policy: ChainPolicy
+    ): List<CommMessage> {
         val device = devices[deviceId] ?: error("Device [$deviceId] not connected.")
         val cfg = device.config
         require(device.transport.isOpen()) { "Device [$deviceId] transport is closed." }
-
         // 将 ModbusTransport 适配成裸 I/O
         val io = object : LinkIO {
             override suspend fun writeRaw(msg: CommMessage) {
@@ -335,6 +338,7 @@ class ModbusProtocol(
                 if (!r.continueNext) return@forEachIndexed
                 if (r.interFrameDelayMs > 0) delay(r.interFrameDelayMs.toLong())
             }
+            all += io.readRaw(cfg.requestTimeoutMs, null, 0)
 
             DeviceStateCenter.updateState(cfg.deviceId, ProtocolState.READY)
             notifyState(device.plugins, cfg, ProtocolState.READY)

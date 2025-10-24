@@ -13,9 +13,9 @@ import com.sik.comm.core.policy.ChainPolicy
 import com.sik.comm.core.protocol.Protocol
 import com.sik.comm.core.protocol.ProtocolType
 import com.sik.comm.core.state.DeviceStateCenter
+import com.sik.comm.impl_ble.internal.ConnectionPool
 import com.sik.comm.impl_ble.io.AndroidGattIo
 import com.sik.comm.impl_ble.io.BleIo
-import com.sik.comm.impl_ble.internal.ConnectionPool
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -213,7 +213,10 @@ class BleProtocol(
         plan: TxPlan,
         policy: ChainPolicy
     ): List<CommMessage> {
-        logger.onError(deviceId, UnsupportedOperationException("BleProtocol.sendChain() not supported"))
+        logger.onError(
+            deviceId,
+            UnsupportedOperationException("BleProtocol.sendChain() not supported")
+        )
         return emptyList()
     }
 
