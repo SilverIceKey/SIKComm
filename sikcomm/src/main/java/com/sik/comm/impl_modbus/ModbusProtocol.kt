@@ -303,19 +303,14 @@ class ModbusProtocol(
         val device = devices[deviceId] ?: error("Device [$deviceId] not connected.")
         val cfg = device.config
         require(device.transport.isOpen()) { "Device [$deviceId] transport is closed." }
-        // 将 ModbusTransport 适配成裸 I/O
+
         val io = object : LinkIO {
             override suspend fun writeRaw(msg: CommMessage) {
                 val scope = ModbusPluginScopes.scope(cfg, ProtocolState.BUSY, msg)
                 device.plugins.forEach { p -> runCatching { p.onBeforeSend(scope) } }
                 device.transport.write(msg.payload)
             }
-
-            override suspend fun readRaw(
-                timeoutMs: Int,
-                expectedSize: Int?,
-                silenceGapMs: Int
-            ): CommMessage {
+            override suspend fun readRaw(timeoutMs: Int, expectedSize: Int?, silenceGapMs: Int): CommMessage {
                 val bytes = device.transport.readFrame(timeoutMs, expectedSize, silenceGapMs)
                 val rsp = CommMessage(command = "CHAIN_RSP", payload = bytes, metadata = emptyMap())
                 val scope = ModbusPluginScopes.scope(cfg, ProtocolState.READY, rsp)
@@ -329,16 +324,15 @@ class ModbusProtocol(
         notifyState(device.plugins, cfg, ProtocolState.BUSY)
 
         try {
-            plan.frames.forEachIndexed { idx, frame ->
-                // 每步下发
+            var shouldContinue = true
+            loop@ for ((idx, frame) in plan.frames.withIndex()) {
+                if (!shouldContinue) break@loop
                 io.writeRaw(frame)
-                // 交给策略按需阻塞读取/校验
                 val r = policy.afterSendStep(idx, frame, io)
                 if (r.received.isNotEmpty()) all += r.received
-                if (!r.continueNext) return@forEachIndexed
                 if (r.interFrameDelayMs > 0) delay(r.interFrameDelayMs.toLong())
+                shouldContinue = r.continueNext
             }
-            all += io.readRaw(cfg.requestTimeoutMs, null, 0)
 
             DeviceStateCenter.updateState(cfg.deviceId, ProtocolState.READY)
             notifyState(device.plugins, cfg, ProtocolState.READY)
