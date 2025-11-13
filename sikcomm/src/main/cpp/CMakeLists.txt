@@ -27,9 +27,8 @@ project("sikcomm")
 # used in the AndroidManifest.xml file.
 add_library(${CMAKE_PROJECT_NAME} SHARED
         # List C/C++ source files with relative paths to this CMakeLists.txt.
-        sikcomm.cpp
-        can/can_jni.c
-        serial_port/serial_port.c
+        serialport_jni.cpp,
+        socketcan_jni.cpp
 )
 
 # Specifies libraries CMake should link to your target library. You
