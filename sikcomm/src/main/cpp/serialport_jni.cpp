@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <termios.h>
 #include <poll.h>
+#include <cstdio>
 #include <errno.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -13,6 +14,43 @@
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 #define LOGW(...) __android_log_print(ANDROID_LOG_WARN,  LOG_TAG, __VA_ARGS__)
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO,  LOG_TAG, __VA_ARGS__)
+
+/**
+ * 使用 su（交互式，无 -c）执行 chmod
+ * su 必须是无交互授权 / 已默认允许的那种，否则会卡住。
+ */
+static bool chmod_with_su(const std::string& path, mode_t mode) {
+    // 起一个 su shell，往 stdin 写命令
+    FILE* fp = popen("su", "w");
+    if (!fp) {
+        LOGE("popen(\"su\") failed");
+        return false;
+    }
+
+    // 写 chmod 命令
+    // 注意末尾一定要有换行，不然 shell 不执行
+    fprintf(fp, "chmod %o \"%s\"\n", mode, path.c_str());
+    // 不放心可以顺带再 ls 一下：
+    // fprintf(fp, "ls -l \"%s\"\n", path.c_str());
+    // 退出 su
+    fprintf(fp, "exit\n");
+    fflush(fp);
+
+    int status = pclose(fp);
+    if (status == -1) {
+        LOGE("pclose(su) failed");
+        return false;
+    }
+
+    if (WIFEXITED(status)) {
+        int code = WEXITSTATUS(status);
+        LOGI("su chmod exit code = %d", code);
+        return code == 0;
+    } else {
+        LOGW("su terminated abnormally");
+        return false;
+    }
+}
 
 // jstring → std::string
 static std::string JStringToString(JNIEnv* env, jstring jstr) {
@@ -142,11 +180,23 @@ Java_com_sik_comm_NativeSerial_open(
         return -EINVAL;
     }
 
-    // 先尝试改下设备节点权限（需要进程本身有权限，没有的话就当没这一步）
+    // 先直接试一下普通 chmod
     if (chmod(path.c_str(), 0666) != 0) {
-        LOGW("chmod(%s, 0666) failed: %s", path.c_str(), strerror(errno));
+        int err = errno;
+        LOGW("chmod(%s, 0666) failed: %s", path.c_str(), strerror(err));
+
+        if (err == EPERM) {
+            // 权限不够，再尝试用 su 提权 chmod
+            LOGI("try chmod_with_su(%s)", path.c_str());
+            if (!chmod_with_su(path, 0666)) {
+                LOGW("chmod_with_su(%s) failed", path.c_str());
+            } else {
+                LOGI("chmod_with_su(%s) success", path.c_str());
+            }
+        }
     }
 
+    // 再尝试打开设备
     int fd = ::open(path.c_str(), O_RDWR | O_NOCTTY | O_NONBLOCK);
     if (fd < 0) {
         int err = errno;
@@ -154,7 +204,7 @@ Java_com_sik_comm_NativeSerial_open(
         return -err;
     }
 
-    // 再次尝试对已打开的 fd 设置权限
+    // 这里其实 fchmod 就没太大必要了，节点权限已经改过了
     if (fchmod(fd, 0666) != 0) {
         LOGW("fchmod(fd=%d, 0666) failed: %s", fd, strerror(errno));
     }
@@ -170,7 +220,7 @@ Java_com_sik_comm_NativeSerial_open(
         int err = -cfg;
         LOGE("ConfigurePort failed: %d (%s)", cfg, strerror(err));
         ::close(fd);
-        return cfg;  // cfg 已经是负 errno
+        return cfg;  // 按你原来的约定：cfg 已经是负 errno
     }
 
     LOGI("open(%s) success, fd=%d", path.c_str(), fd);
