@@ -299,27 +299,56 @@ Java_com_sik_comm_NativeSerial_read(
         jint timeoutMs
 ) {
     int fd = static_cast<int>(handle);
-    if (fd < 0) return -EBADF;
-    if (jBuffer == nullptr || length <= 0) return -EINVAL;
+    if (fd < 0) {
+        LOGE("read: bad fd=%d", fd);
+        return -EBADF;
+    }
+    if (jBuffer == nullptr || length <= 0) {
+        LOGE("read: invalid buffer or length=%d", length);
+        return -EINVAL;
+    }
 
     jsize arrayLen = env->GetArrayLength(jBuffer);
-    if (offset < 0 || length < 0 || offset + length > arrayLen) return -EINVAL;
+    if (offset < 0 || length < 0 || offset + length > arrayLen) {
+        LOGE("read: invalid offset=%d length=%d arrayLen=%d",
+             offset, length, arrayLen);
+        return -EINVAL;
+    }
 
     struct pollfd pfd{};
     pfd.fd = fd;
     pfd.events = POLLIN;
 
+    LOGI("read: fd=%d, offset=%d, length=%d, timeout=%d",
+         fd, offset, length, timeoutMs);
+
     int ret = poll(&pfd, 1, timeoutMs);
     if (ret < 0) {
         int err = errno;
-        LOGE("read poll failed: %s", strerror(err));
+        LOGE("read: poll failed: %s", strerror(err));
         return -err;
     } else if (ret == 0) {
+        LOGI("read: poll timeout, no data");
         return 0; // 超时无数据
     }
 
+    LOGI("read: poll ret=%d, revents=0x%x", ret, pfd.revents);
+
+    // 这里必须判断下是不是 POLLIN，不然 POLLERR/POLLHUP 也会进来
+    if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
+        LOGE("read: poll error revents=0x%x", pfd.revents);
+        return -EIO;
+    }
+    if (!(pfd.revents & POLLIN)) {
+        LOGW("read: revents=0x%x but no POLLIN, skip", pfd.revents);
+        return 0;
+    }
+
     jbyte* buf = env->GetByteArrayElements(jBuffer, nullptr);
-    if (buf == nullptr) return -ENOMEM;
+    if (buf == nullptr) {
+        LOGE("read: GetByteArrayElements failed");
+        return -ENOMEM;
+    }
 
     ssize_t n = ::read(fd, buf + offset, static_cast<size_t>(length));
     int savedErr = errno;
@@ -327,9 +356,11 @@ Java_com_sik_comm_NativeSerial_read(
     env->ReleaseByteArrayElements(jBuffer, buf, 0);
 
     if (n < 0) {
-        LOGE("read failed: %s", strerror(savedErr));
+        LOGE("read: ::read failed: %s", strerror(savedErr));
         return -savedErr;
     }
+
+    LOGI("read: got %zd bytes", n);
     return static_cast<jint>(n);
 }
 

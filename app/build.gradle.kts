@@ -50,7 +50,7 @@ dependencies {
     implementation(libs.androidx.activity)
     implementation(libs.androidx.constraintlayout)
     implementation(project(":sikcomm"))
-    implementation("com.github.SilverIceKey:SIKExtension:1.1.68")
+    implementation("com.github.SilverIceKey:SIKExtension:1.1.73")
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
