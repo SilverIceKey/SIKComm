@@ -180,34 +180,45 @@ Java_com_sik_comm_NativeSerial_open(
         return -EINVAL;
     }
 
-    // 先直接试一下普通 chmod
-    if (chmod(path.c_str(), 0666) != 0) {
-        int err = errno;
-        LOGW("chmod(%s, 0666) failed: %s", path.c_str(), strerror(err));
+    auto do_open = [&](const char* tag) -> int {
+        int fd = ::open(path.c_str(), O_RDWR | O_NOCTTY | O_NONBLOCK);
+        if (fd < 0) {
+            int err = errno;
+            LOGE("%s open(%s) failed: %s", tag, path.c_str(), strerror(err));
+            return -err;   // 约定：负 errno
+        }
+        LOGI("%s open(%s) success, fd=%d", tag, path.c_str(), fd);
+        return fd;
+    };
 
-        if (err == EPERM) {
-            // 权限不够，再尝试用 su 提权 chmod
-            LOGI("try chmod_with_su(%s)", path.c_str());
-            if (!chmod_with_su(path, 0666)) {
-                LOGW("chmod_with_su(%s) failed", path.c_str());
-            } else {
-                LOGI("chmod_with_su(%s) success", path.c_str());
-            }
+    // 1️⃣ 先尝试直接 open
+    int fd = do_open("first");
+    if (fd < 0) {
+        int err = -fd;
+
+        // 如果不是权限错误，没必要改权限，直接返回
+        if (err != EACCES && err != EPERM) {
+            return fd; // 负 errno
+        }
+
+        LOGW("open failed with permission error (%d: %s), try chmod_with_su...",
+             err, strerror(err));
+
+        // 2️⃣ 用 su 去把权限改成 0666
+        if (!chmod_with_su(path, 0666)) {
+            LOGE("chmod_with_su(%s) failed", path.c_str());
+            return fd;    // 还是原来的权限错误
+        }
+
+        // 3️⃣ 权限改完再试一次 open
+        fd = do_open("after_chmod");
+        if (fd < 0) {
+            // 改完权限还不行，那就真没辙了
+            return fd;
         }
     }
 
-    // 再尝试打开设备
-    int fd = ::open(path.c_str(), O_RDWR | O_NOCTTY | O_NONBLOCK);
-    if (fd < 0) {
-        int err = errno;
-        LOGE("open(%s) failed: %s", path.c_str(), strerror(err));
-        return -err;
-    }
-
-    // 这里其实 fchmod 就没太大必要了，节点权限已经改过了
-    if (fchmod(fd, 0666) != 0) {
-        LOGW("fchmod(fd=%d, 0666) failed: %s", fd, strerror(errno));
-    }
+    // 走到这里，fd > 0，说明 open 已经成功了
 
     // 清掉非阻塞
     int flags = fcntl(fd, F_GETFL, 0);
@@ -223,7 +234,7 @@ Java_com_sik_comm_NativeSerial_open(
         return cfg;  // 按你原来的约定：cfg 已经是负 errno
     }
 
-    LOGI("open(%s) success, fd=%d", path.c_str(), fd);
+    LOGI("ConfigurePort success on %s, fd=%d", path.c_str(), fd);
     return static_cast<jlong>(fd);
 }
 
