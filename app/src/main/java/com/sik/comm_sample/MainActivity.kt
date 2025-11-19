@@ -27,7 +27,7 @@ class MainActivity : AppCompatActivity() {
 
         findViewById<Button>(R.id.button).setDebouncedClickListener {
             ThreadUtils.runOnIO {
-                SikComm.open(SerialConfig("ScanDevice", "/dev/ttyS3", 9600)).apply {
+                SikComm.open(SerialConfig("ScanDevice", "/dev/ttyS3", 115200)).apply {
                     open()
                 }
                     .setReceiver { data, offset, length ->
