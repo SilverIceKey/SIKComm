@@ -77,5 +77,6 @@ publishing {
 
 dependencies {
     implementation(libs.androidx.core.ktx)
+    implementation("com.github.felHR85:UsbSerial:6.1.0")
 }
 

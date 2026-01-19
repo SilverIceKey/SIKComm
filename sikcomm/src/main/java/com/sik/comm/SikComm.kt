@@ -20,6 +20,7 @@ object SikComm {
     @JvmStatic
     fun open(config: CommConfig): CommChannel = when (config) {
         is SerialConfig -> SerialChannelImpl(config)
-        is CanConfig    -> CanChannelImpl(config)
+        is CanConfig -> CanChannelImpl(config)
+        is UsbSerialConfig -> UsbSerialChannelImpl(config)
     }
 }
