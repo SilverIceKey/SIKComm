@@ -22,5 +22,6 @@ object SikComm {
         is SerialConfig -> SerialChannelImpl(config)
         is CanConfig -> CanChannelImpl(config)
         is UsbSerialConfig -> UsbSerialChannelImpl(config)
+        is UsbHidConfig -> UsbHidChannelImpl(config)   // ✅ 新增
     }
 }

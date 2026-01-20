@@ -8,9 +8,12 @@ import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
-import com.sik.comm.*
+import com.sik.comm.QrAssemblePolicy
+import com.sik.comm.UsbDeviceMatcher
+import com.sik.comm.UsbSerialConfig
+import com.sik.comm.sliceFast
+import com.sik.comm.toHex
 import com.sik.sikcore.extension.setDebouncedClickListener
-import java.nio.charset.Charset
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -34,12 +37,14 @@ class MainActivity : AppCompatActivity() {
         }
 
         findViewById<Button>(R.id.button).setDebouncedClickListener {
-            uiLog("点击：打开 USB 扫码")
+            uiLog("点击：打开 HID 扫码")
 
-            // 先装 receiver，避免第一包丢
+            // 先挂 receiver，避免第一包丢
             UsbScanHelper.setReceiver { data, offset, length ->
                 val scanContent =
-                    data.sliceFast(offset, length).toString(Charset.defaultCharset())
+                    data.sliceFast(offset, length).apply {
+                        Log.i("SIKCOMM-DATA", "${this.joinToString(",")}")
+                    }.toHex()
                         .replace("\r", "")
                         .replace("\\r", "")
                         .replace("\n", "")
@@ -48,38 +53,25 @@ class MainActivity : AppCompatActivity() {
                 Log.i("SIKComm", "接收的数据:$scanContent")
             }
 
-            // 主线程 init/open：让 USB 授权弹窗时机更稳
             UsbScanHelper.init(
                 UsbSerialConfig(
-                    id = "UsbScan",
-                    context = this@MainActivity,
-                    deviceMatcher = UsbDeviceMatcher.VidPidWhitelist(
-                        setOf(0x1A86 to 0x7523)
-                    ),
-                    // 粒度1：你现在这个 1A86:7523 基本就是 CH34x
-                    driverPolicy = UsbDriverPolicy.Prefer(UsbDriverFamily.CH34X),
-                    baudRate = 9600,
-                    dataBits = 8,
-                    stopBits = 1,
-                    parity = 0,
-                    readTimeoutMs = 200,
-                    writeTimeoutMs = 200
+                    id = "qr",
+                    context = this,
+                    deviceMatcher = UsbDeviceMatcher.QrScannerDemoWhitelist, // demo 同款白名单
                 )
             )
 
-            uiLog("init 已调用：等待权限弹窗/设备数据…")
+            uiLog("init 已调用：等待权限/数据…")
         }
     }
 
     private fun uiLog(msg: String) {
         val t = SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault()).format(Date())
-        runOnUiThread {
-            tvLog.append("[$t] $msg\n")
-        }
+        runOnUiThread { tvLog.append("[$t] $msg\n") }
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        UsbScanHelper.release()
+//        UsbScanHelper.release()
     }
 }

@@ -16,6 +16,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicBoolean
@@ -39,6 +40,13 @@ internal class UsbSerialChannelImpl(
     private var handle: Long = 0L
     @Volatile
     private var receiver: CommReceiver? = null
+
+    /** 业务侧传进来的 receiver（可能被内部 wrapper 包一层） */
+    @Volatile
+    private var userReceiver: CommReceiver? = null
+
+    /** demo 行为对齐：400ms 拼包 + 3s 超时清空 + 可选剔除 \r\n */
+    private val qrAssembler: QrAssembler? = config.qrAssemblePolicy?.let { QrAssembler(it) }
 
     private var ioJob: Job? = null
     private val openRequested = AtomicBoolean(false)
@@ -66,7 +74,14 @@ internal class UsbSerialChannelImpl(
     }
 
     override fun setReceiver(receiver: CommReceiver?) {
-        this.receiver = receiver
+        this.userReceiver = receiver
+        // 若开启了扫码拼包策略，则内部包装，确保对外调用方式不变、但行为与 demo 一致
+        this.receiver = if (receiver == null) {
+            null
+        } else {
+            val asm = qrAssembler
+            if (asm == null) receiver else asm.wrap(receiver)
+        }
     }
 
     override fun open() {
@@ -155,16 +170,23 @@ internal class UsbSerialChannelImpl(
 
                 val n = NativeUsbSerial.read(hRead, buffer, config.readTimeoutMs)
                 when {
+                    // n>0: got bytes
                     n > 0 -> {
                         receiver?.onBytesReceived(buffer, 0, n)
                         continue
                     }
 
-                    n < 0 -> {
+                    // 重点：按你的要求对齐设备行为
+                    // 有些实现里 n=-1 只是“本轮没读到数据”，不是失败；等价于 timeout。
+                    n == 0 || n == -1 -> {
+                        // no data, fall through to write
+                    }
+
+                    // 其他负数：当作真正错误
+                    else -> {
                         Log.e(TAG, "read error n=$n (id=$id)")
                         break
                     }
-                    // n==0 => timeout, no data
                 }
 
                 val w = writeQueue.tryReceive().getOrNull()
@@ -204,6 +226,99 @@ internal class UsbSerialChannelImpl(
                 )
             }
         } catch (_: Throwable) {
+        }
+    }
+
+    /**
+     * 扫码枪拼包器：严格对齐 demo UsbService.mCallback.onReceivedData
+     * - DeleteElement：剔除 13/10
+     * - 3 秒超时清空旧数据
+     * - 400ms 窗口内的分段数据拼接一次回调
+     *
+     * 注意：这里的输出是“UTF-8 文本对应的 bytes”。
+     */
+    private inner class QrAssembler(
+        private val policy: QrAssemblePolicy
+    ) {
+        private val lock = Any()
+        private val parts = ArrayList<String>(8)
+
+        @Volatile
+        private var lastTimeMs: Long = 0L
+
+        @Volatile
+        private var emitJob: Job? = null
+
+        fun wrap(downstream: CommReceiver): CommReceiver {
+            return CommReceiver { data, offset, length ->
+                onChunk(downstream, data, offset, length)
+            }
+        }
+
+        private fun resetListData(now: Long) {
+            if (lastTimeMs == 0L) {
+                lastTimeMs = now
+                return
+            }
+            val diffSeconds = ((now - lastTimeMs) / 1000L)
+            if (diffSeconds >= policy.resetTimeoutSeconds) {
+                parts.clear()
+            }
+            lastTimeMs = now
+        }
+
+        private fun onChunk(downstream: CommReceiver, data: ByteArray, offset: Int, length: Int) {
+            if (length <= 0) return
+
+            val now = System.currentTimeMillis()
+
+            // 复制一份：底层 buffer 会复用
+            val slice = data.copyOfRange(offset, offset + length)
+
+            // 对标 demo DeleteElement：剔除 13/10
+            val filtered: ByteArray = if (!policy.dropCrLf) {
+                slice
+            } else {
+                val tmp = ByteArray(slice.size)
+                var k = 0
+                for (b in slice) {
+                    val v = b.toInt() and 0xFF
+                    if (v != 13 && v != 10) {
+                        tmp[k++] = b
+                    }
+                }
+                if (k == 0) return
+                tmp.copyOfRange(0, k)
+            }
+
+            // 对标 demo new String(bytes, "UTF-8")
+            val text = try {
+                String(filtered, Charsets.UTF_8)
+            } catch (_: Throwable) {
+                return
+            }
+            if (text.isEmpty()) return
+
+            synchronized(lock) {
+                resetListData(now)
+                parts.add(text)
+
+                // 对标 demo: removeCallbacks + postDelayed(400)
+                emitJob?.cancel()
+                emitJob = scope.launch {
+                    delay(policy.mergeWindowMs)
+                    val merged = synchronized(lock) {
+                        if (parts.isEmpty()) return@launch
+                        buildString {
+                            for (p in parts) append(p)
+                        }.also { parts.clear() }
+                    }
+                    if (merged.isNotEmpty()) {
+                        val out = merged.toByteArray(Charsets.UTF_8)
+                        downstream.onBytesReceived(out, 0, out.size)
+                    }
+                }
+            }
         }
     }
 
