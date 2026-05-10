@@ -2,7 +2,7 @@ package com.sik.comm.internal.transport
 
 import android.util.Log
 import com.sik.comm.CommConfig
-import com.sik.comm.NativeSerial
+import com.sik.comm.internal.native.NativeSerial
 import com.sik.comm.SerialConfig
 
 /**

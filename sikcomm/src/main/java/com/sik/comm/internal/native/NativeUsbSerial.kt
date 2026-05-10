@@ -1,4 +1,4 @@
-package com.sik.comm
+package com.sik.comm.internal.native
 
 import android.content.Context
 import android.hardware.usb.UsbDevice
@@ -7,6 +7,10 @@ import android.hardware.usb.UsbManager
 import android.util.Log
 import com.felhr.usbserial.UsbSerialDevice
 import com.felhr.usbserial.UsbSerialInterface
+import com.sik.comm.UsbDeviceMatcher
+import com.sik.comm.UsbDriverFamily
+import com.sik.comm.UsbDriverPolicy
+import com.sik.comm.UsbSerialConfig
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 

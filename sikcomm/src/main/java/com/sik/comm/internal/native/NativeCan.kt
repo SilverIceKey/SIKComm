@@ -1,4 +1,4 @@
-package com.sik.comm
+package com.sik.comm.internal.native
 
 /**
  * SocketCAN JNI 封装。

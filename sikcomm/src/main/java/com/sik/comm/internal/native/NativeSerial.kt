@@ -1,4 +1,4 @@
-package com.sik.comm
+package com.sik.comm.internal.native
 
 /**
  * 串口 JNI 封装。

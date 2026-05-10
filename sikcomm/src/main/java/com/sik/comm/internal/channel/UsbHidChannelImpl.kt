@@ -62,7 +62,7 @@ internal class UsbHidChannelImpl(
         if (isOpen()) return
         if (!tryTransition(com.sik.comm.internal.state.ChannelState.Closed, com.sik.comm.internal.state.ChannelState.Opening)) return
 
-        val device = com.sik.comm.NativeUsbHid.findDevice(appContext, config.deviceMatcher)
+        val device = com.sik.comm.internal.native.NativeUsbHid.findDevice(appContext, config.deviceMatcher)
         if (device == null) {
             Log.e(TAG, "open: no matched device (id=$id)")
             transitionState(com.sik.comm.internal.state.ChannelState.Closed)

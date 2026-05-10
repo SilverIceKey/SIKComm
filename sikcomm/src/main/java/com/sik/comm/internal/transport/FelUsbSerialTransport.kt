@@ -1,7 +1,7 @@
 package com.sik.comm.internal.transport
 
 import com.sik.comm.CommConfig
-import com.sik.comm.NativeUsbSerial
+import com.sik.comm.internal.native.NativeUsbSerial
 import com.sik.comm.UsbSerialConfig
 
 /**

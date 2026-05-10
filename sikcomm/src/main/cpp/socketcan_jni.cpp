@@ -103,7 +103,7 @@ extern "C" {
  * bitrate / fdMode 只是预留参数，如果你以后要加 netlink/ip 配置再搞。
  */
 JNIEXPORT jint JNICALL
-Java_com_sik_comm_NativeCan_bringUp(
+Java_com_sik_comm_internal_native_NativeCan_bringUp(
         JNIEnv* env,
         jclass,
         jstring jIfName,
@@ -126,7 +126,7 @@ Java_com_sik_comm_NativeCan_bringUp(
  * int bringDown(String ifName)
  */
 JNIEXPORT jint JNICALL
-Java_com_sik_comm_NativeCan_bringDown(
+Java_com_sik_comm_internal_native_NativeCan_bringDown(
         JNIEnv* env,
         jclass,
         jstring jIfName
@@ -150,7 +150,7 @@ Java_com_sik_comm_NativeCan_bringDown(
  * 3. socket(PF_CAN, SOCK_RAW, CAN_RAW) + bind
  */
 JNIEXPORT jlong JNICALL
-Java_com_sik_comm_NativeCan_open(
+Java_com_sik_comm_internal_native_NativeCan_open(
         JNIEnv* env,
         jclass,
         jstring jIfName
@@ -207,7 +207,7 @@ Java_com_sik_comm_NativeCan_open(
  *  bit3: BRS (不支持 -> -ENOTSUP)
  */
 JNIEXPORT jint JNICALL
-Java_com_sik_comm_NativeCan_write(
+Java_com_sik_comm_internal_native_NativeCan_write(
         JNIEnv* env,
         jclass,
         jlong handle,
@@ -288,7 +288,7 @@ Java_com_sik_comm_NativeCan_write(
  *  <0: 错误
  */
 JNIEXPORT jint JNICALL
-Java_com_sik_comm_NativeCan_read(
+Java_com_sik_comm_internal_native_NativeCan_read(
         JNIEnv* env,
         jclass,
         jlong handle,
@@ -373,7 +373,7 @@ Java_com_sik_comm_NativeCan_read(
  * void close(long handle)
  */
 JNIEXPORT void JNICALL
-Java_com_sik_comm_NativeCan_close(
+Java_com_sik_comm_internal_native_NativeCan_close(
         JNIEnv*,
         jclass,
         jlong handle

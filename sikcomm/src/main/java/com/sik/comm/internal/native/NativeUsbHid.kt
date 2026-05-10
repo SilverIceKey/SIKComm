@@ -1,8 +1,10 @@
-package com.sik.comm
+package com.sik.comm.internal.native
 
 import android.content.Context
 import android.hardware.usb.*
 import android.util.Log
+import com.sik.comm.UsbDeviceMatcher
+import com.sik.comm.UsbHidConfig
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 

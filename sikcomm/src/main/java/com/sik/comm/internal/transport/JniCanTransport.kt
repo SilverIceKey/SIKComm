@@ -3,7 +3,7 @@ package com.sik.comm.internal.transport
 import android.util.Log
 import com.sik.comm.CanConfig
 import com.sik.comm.CommConfig
-import com.sik.comm.NativeCan
+import com.sik.comm.internal.native.NativeCan
 
 /**
  * SocketCAN Transport（JNI / socketcan）。

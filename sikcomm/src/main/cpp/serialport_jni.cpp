@@ -165,7 +165,7 @@ extern "C" {
  * jlong open(String path, int baudRate, int dataBits, int stopBits, int parity)
  */
 JNIEXPORT jlong JNICALL
-Java_com_sik_comm_NativeSerial_open(
+Java_com_sik_comm_internal_native_NativeSerial_open(
         JNIEnv* env,
         jclass,
         jstring jPath,
@@ -242,7 +242,7 @@ Java_com_sik_comm_NativeSerial_open(
  * int write(long handle, byte[] data, int offset, int length, int timeoutMs)
  */
 JNIEXPORT jint JNICALL
-Java_com_sik_comm_NativeSerial_write(
+Java_com_sik_comm_internal_native_NativeSerial_write(
         JNIEnv* env,
         jclass,
         jlong handle,
@@ -289,7 +289,7 @@ Java_com_sik_comm_NativeSerial_write(
  * int read(long handle, byte[] buffer, int offset, int length, int timeoutMs)
  */
 JNIEXPORT jint JNICALL
-Java_com_sik_comm_NativeSerial_read(
+Java_com_sik_comm_internal_native_NativeSerial_read(
         JNIEnv* env,
         jclass,
         jlong handle,
@@ -368,7 +368,7 @@ Java_com_sik_comm_NativeSerial_read(
  * void close(long handle)
  */
 JNIEXPORT void JNICALL
-Java_com_sik_comm_NativeSerial_close(
+Java_com_sik_comm_internal_native_NativeSerial_close(
         JNIEnv*,
         jclass,
         jlong handle
