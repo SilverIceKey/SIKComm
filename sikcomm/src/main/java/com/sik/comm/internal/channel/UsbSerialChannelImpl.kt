@@ -40,7 +40,7 @@ internal class UsbSerialChannelImpl(
         context = appContext,
         actionSuffix = "SIKCOMM_USB_PERMISSION.$id",
         onGranted = ::openInternal,
-        onDenied = { setState(com.sik.comm.internal.state.ChannelState.Closed) }
+        onDenied = { transitionState(com.sik.comm.internal.state.ChannelState.Closed) }
     )
 
     private val pipeline: CommReceiver? by lazy {
@@ -62,7 +62,7 @@ internal class UsbSerialChannelImpl(
         val device = com.sik.comm.NativeUsbSerial.findDevice(appContext, config.deviceMatcher)
         if (device == null) {
             Log.e(TAG, "open: no matched device (id=$id)")
-            setState(com.sik.comm.internal.state.ChannelState.Closed)
+            transitionState(com.sik.comm.internal.state.ChannelState.Closed)
             return
         }
 
@@ -75,10 +75,10 @@ internal class UsbSerialChannelImpl(
         val h = doOpen()
         if (h <= 0L) {
             Log.e(TAG, "openInternal: doOpen failed (id=$id)")
-            setState(com.sik.comm.internal.state.ChannelState.Closed)
+            transitionState(com.sik.comm.internal.state.ChannelState.Closed)
             return
         }
-        setState(com.sik.comm.internal.state.ChannelState.Open(h))
+        transitionState(com.sik.comm.internal.state.ChannelState.Open(h))
         onOpened(h)
     }
 

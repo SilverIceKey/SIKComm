@@ -60,4 +60,12 @@ interface CommChannel {
      * - 推荐在调用 open() 之前就设置好 receiver，方便启动后立即处理数据。
      */
     fun setReceiver(receiver: CommReceiver?)
+
+    /**
+     * 设置打开结果回调。
+     *
+     * 用于监听 open() 的异步结果（尤其 USB 权限场景）。
+     * 建议在调用 [open] 之前设置。
+     */
+    fun setOpenCallback(callback: OpenCallback?)
 }

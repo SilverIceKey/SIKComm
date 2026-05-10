@@ -14,9 +14,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - `CommException.OpenFailed` — 打开通道失败
   - `CommException.WriteTimeout` — 写入超时
   - `CommException.TransportError` — 底层传输错误
+- 新增 `OpenCallback` 回调接口：监听 `open()` 异步结果（尤其 USB 权限场景）。
+  ```kotlin
+  channel.setOpenCallback { success, error ->
+      if (!success) Log.e("SIKComm", "打开失败: ${error?.message}")
+  }
+  ```
 - 新增 `BaseCommChannel` 内部基类：统一状态机管理（`ChannelState`：Closed / Opening / Open / Failed）。
 - 新增 `ReceivePipeline` + `QrAssembleStage`：接收处理管道化，拼包逻辑从 `UsbSerialChannelImpl` 中彻底解耦。
-- 新增 `MockTransport` + 26 个单元测试：覆盖 Transport / IoLooper / Pipeline / Registry / QrAssemble。
+- 新增 `MockTransport` + 32 个单元测试：覆盖 Transport / IoLooper / Pipeline / Registry / QrAssemble / BaseCommChannel。
 
 ### Changed
 - **行为变化**：`CommChannel.send()` 在通道未打开时，从抛出 `IllegalStateException` 改为抛出 `CommException.NotOpen`。

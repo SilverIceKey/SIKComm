@@ -3,6 +3,7 @@ package com.sik.comm.internal.channel
 import com.sik.comm.CommChannel
 import com.sik.comm.CommException
 import com.sik.comm.CommReceiver
+import com.sik.comm.OpenCallback
 import com.sik.comm.internal.state.ChannelState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -17,6 +18,7 @@ import java.util.concurrent.atomic.AtomicReference
  * - 协程作用域管理
  * - 接收回调托管
  * - 统一状态机（AtomicReference CAS）
+ * - 打开结果回调（[OpenCallback]）自动触发
  *
  * 子类职责：
  * - 实现 [doOpen]：同步打开底层连接，返回句柄
@@ -36,6 +38,9 @@ internal abstract class BaseCommChannel(
     @Volatile
     protected var currentReceiver: CommReceiver? = null
 
+    @Volatile
+    private var openCallback: OpenCallback? = null
+
     // ---------- 状态机工具 ----------
 
     protected val currentState: ChannelState get() = stateRef.get()
@@ -43,8 +48,17 @@ internal abstract class BaseCommChannel(
     protected fun tryTransition(expected: ChannelState, newState: ChannelState): Boolean =
         stateRef.compareAndSet(expected, newState)
 
-    protected fun setState(newState: ChannelState) {
-        stateRef.set(newState)
+    /**
+     * 设置状态，并在状态发生实质变化时自动触发 [OpenCallback]。
+     */
+    protected fun transitionState(newState: ChannelState) {
+        val oldState = stateRef.getAndSet(newState)
+        if (oldState == newState) return
+        when (newState) {
+            is ChannelState.Open -> openCallback?.onResult(true, null)
+            is ChannelState.Failed -> openCallback?.onResult(false, newState.cause)
+            else -> {}
+        }
     }
 
     protected fun requireHandle(): Long {
@@ -59,6 +73,10 @@ internal abstract class BaseCommChannel(
 
     override fun setReceiver(receiver: CommReceiver?) {
         this.currentReceiver = receiver
+    }
+
+    override fun setOpenCallback(callback: OpenCallback?) {
+        this.openCallback = callback
     }
 
     /**
@@ -78,15 +96,16 @@ internal abstract class BaseCommChannel(
                     try {
                         val handle = doOpen()
                         if (handle > 0L) {
-                            setState(ChannelState.Open(handle))
+                            transitionState(ChannelState.Open(handle))
                             onOpened(handle)
                             return
                         } else {
-                            setState(ChannelState.Failed(CommException.OpenFailed(id, handle)))
-                            throw CommException.OpenFailed(id, handle)
+                            val error = CommException.OpenFailed(id, handle)
+                            transitionState(ChannelState.Failed(error))
+                            throw error
                         }
                     } catch (e: Throwable) {
-                        setState(ChannelState.Failed(e))
+                        transitionState(ChannelState.Failed(e))
                         throw e
                     }
                 }

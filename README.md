@@ -261,6 +261,17 @@ lifecycleScope.launch {
 
 - `send()` 在通道未打开时，从 `IllegalStateException` 改为 `CommException.NotOpen`。
   - 若业务层精确捕获 `IllegalStateException`，请改为捕获 `CommException` 或 `RuntimeException`。
+- 新增 `OpenCallback` 异步打开结果监听：
+  ```kotlin
+  channel.setOpenCallback { success, error ->
+      if (success) {
+          Log.i("SIKComm", "通道已打开")
+      } else {
+          Log.e("SIKComm", "打开失败: ${error?.message}")
+      }
+  }
+  channel.open()
+  ```
 - 新增 `CommException` 异常体系，支持精细化错误处理：
   ```kotlin
   try {
