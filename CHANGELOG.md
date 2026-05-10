@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [2.1.0] - 2025-05
+
+### Added
+- 新增公共异常体系 `CommException`：统一通道操作的错误类型。
+  - `CommException.NotOpen` — 通道未打开时调用操作
+  - `CommException.OpenFailed` — 打开通道失败
+  - `CommException.WriteTimeout` — 写入超时
+  - `CommException.TransportError` — 底层传输错误
+- 新增 `BaseCommChannel` 内部基类：统一状态机管理（`ChannelState`：Closed / Opening / Open / Failed）。
+- 新增 `ReceivePipeline` + `QrAssembleStage`：接收处理管道化，拼包逻辑从 `UsbSerialChannelImpl` 中彻底解耦。
+- 新增 `MockTransport` + 26 个单元测试：覆盖 Transport / IoLooper / Pipeline / Registry / QrAssemble。
+
+### Changed
+- **行为变化**：`CommChannel.send()` 在通道未打开时，从抛出 `IllegalStateException` 改为抛出 `CommException.NotOpen`。
+  - 如果业务层原先精确捕获 `IllegalStateException`，需要调整为捕获 `CommException` 或 `RuntimeException`。
+- **行为变化**：`CommChannel.open()` 内部统一使用 `ChannelState` 状态机，Serial / CAN 失败时抛出 `CommException.OpenFailed`；USB 通道保持原有静默失败行为，但内部状态统一。
+- 目录结构优化：四个 `ChannelImpl` 从 `com.sik.comm` 根包移至 `com.sik.comm.internal.channel`。
+
+### Removed
+- 移除未使用的 `CdcAcmDriver`、`UsbSerialDriver` 内部类。
+
 ## [2.0.6] - 2025-05
 
 ### Changed

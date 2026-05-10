@@ -69,23 +69,28 @@ SIKComm 是一个专注于 Android 平台的轻量级通信框架，目标是提
 SIKComm/
 ├── sikcomm/                    # 核心 Library 模块（发布到 JitPack）
 │   ├── src/main/java/com/sik/comm/
-│   │   ├── SikComm.kt          # 对外唯一入口：SikComm.open(config)
-│   │   ├── CommChannel.kt      # 统一通道接口（open / close / send / setReceiver）
+│   │   ├── SikComm.kt          # 对外唯一入口
+│   │   ├── CommChannel.kt      # 统一通道接口
 │   │   ├── CommConfig.kt       # 配置基类（sealed interface）
-│   │   ├── CommReceiver.kt     # 接收回调（onBytesReceived）
+│   │   ├── CommReceiver.kt     # 接收回调
+│   │   ├── CommException.kt    # 统一异常体系
 │   │   ├── SerialConfig.kt     # 串口配置
 │   │   ├── CanConfig.kt        # CAN 配置
-│   │   ├── UsbSerialConfig.kt  # USB-Serial 配置 + 扫码枪拼包策略
+│   │   ├── UsbSerialConfig.kt  # USB-Serial 配置
 │   │   ├── UsbHidConfig.kt     # USB-HID 配置
-│   │   ├── SerialChannelImpl.kt
-│   │   ├── CanChannelImpl.kt
-│   │   ├── UsbSerialChannelImpl.kt
-│   │   ├── UsbHidChannelImpl.kt
+│   │   ├── ByteArrayExt.kt     # ByteArray 工具
 │   │   ├── NativeSerial.kt     # 串口 JNI
 │   │   ├── NativeCan.kt        # CAN JNI
 │   │   ├── NativeUsbSerial.kt  # USB-Serial 封装
-│   │   ├── NativeUsbHid.kt     # USB-HID 封装
-│   │   └── ByteArrayExt.kt     # ByteArray 工具（sliceFast / toHex）
+│   │   └── NativeUsbHid.kt     # USB-HID 封装
+│   │   └── internal/           # 内部实现（不对外暴露）
+│   │       ├── channel/        # 通道实现（BaseCommChannel + 4 个具体实现）
+│   │       ├── transport/      # Transport 抽象 + 4 个实现 + MockTransport
+│   │       ├── ioloop/         # HalfDuplexIoLooper / FullDuplexLooper
+│   │       ├── usb/            # UsbPermissionBroker
+│   │       ├── pipeline/       # ReceivePipeline / QrAssembleStage
+│   │       ├── state/          # ChannelState 状态机
+│   │       └── factory/        # ChannelFactory / ChannelRegistry
 │   └── src/main/cpp/           # JNI / Native 层（CMake）
 │       ├── sikcomm.cpp
 │       ├── serialport_jni.cpp
@@ -93,8 +98,8 @@ SIKComm/
 ├── app/                        # 示例 Demo App
 │   └── src/main/java/com/sik/comm_sample/
 │       ├── MainActivity.kt
-│       └── UsbScanHelper.kt    # 封装示例：USB 扫码枪 Helper
-├── gradle.properties           # VERSION=2.0.6
+│       └── UsbScanHelper.kt
+├── gradle.properties           # VERSION=2.1.0
 └── jitpack.yml                 # JitPack 构建配置
 ```
 
@@ -122,7 +127,7 @@ dependencyResolutionManagement {
 
 ```kotlin
 dependencies {
-    implementation("com.github.silvericekey:SIKComm:2.0.6")
+    implementation("com.github.silvericekey:SIKComm:2.1.0")
 }
 ```
 
@@ -250,7 +255,24 @@ lifecycleScope.launch {
 
 ### 当前版本
 
-> 当前代码对应版本：**2.0.6**
+> 当前代码对应版本：**2.1.0**
+
+### 2.1.0 行为变化注意
+
+- `send()` 在通道未打开时，从 `IllegalStateException` 改为 `CommException.NotOpen`。
+  - 若业务层精确捕获 `IllegalStateException`，请改为捕获 `CommException` 或 `RuntimeException`。
+- 新增 `CommException` 异常体系，支持精细化错误处理：
+  ```kotlin
+  try {
+      channel.send(data)
+  } catch (e: CommException.NotOpen) {
+      // 通道未打开
+  } catch (e: CommException.WriteTimeout) {
+      // 写入超时
+  } catch (e: CommException.TransportError) {
+      // 底层传输错误，e.code 为错误码
+  }
+  ```
 
 ---
 

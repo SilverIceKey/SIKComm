@@ -1,38 +1,29 @@
-package com.sik.comm
+package com.sik.comm.internal.channel
 
 import android.content.Context
 import android.hardware.usb.UsbDevice
 import android.util.Log
+import com.sik.comm.CommReceiver
+import com.sik.comm.UsbSerialConfig
 import com.sik.comm.internal.ioloop.HalfDuplexIoLooper
 import com.sik.comm.internal.pipeline.QrAssembleStage
 import com.sik.comm.internal.pipeline.ReceivePipeline
 import com.sik.comm.internal.transport.FelUsbSerialTransport
 import com.sik.comm.internal.transport.Transport
 import com.sik.comm.internal.usb.UsbPermissionBroker
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 
 /**
  * USB-Serial 通道实现（felHR85/UsbSerial）。
- *
- * 特性：
- * - 半双工读优先 IO 调度
- * - 内置 USB 权限管理
- * - 可选扫码枪拼包策略（通过 [ReceivePipeline] 实现）
  */
 internal class UsbSerialChannelImpl(
     private val config: UsbSerialConfig,
     transportOverride: Transport? = null
-) : CommChannel {
+) : BaseCommChannel(config.id) {
 
     companion object {
         private const val TAG = "SIKComm-USB"
     }
-
-    override val id: String get() = config.id
 
     private val appContext: Context = config.context.applicationContext
 
@@ -40,42 +31,38 @@ internal class UsbSerialChannelImpl(
     private val looper = HalfDuplexIoLooper(
         transport = transport,
         readTimeoutMs = config.readTimeoutMs,
-        readErrorFilter = { it == -1 }  // -1 视为 timeout，继续循环
+        readErrorFilter = { it == -1 }
     )
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    private var ioJob: Job? = null
 
     private val permissionBroker = UsbPermissionBroker(
         context = appContext,
         actionSuffix = "SIKCOMM_USB_PERMISSION.$id",
-        onGranted = ::openInternal
+        onGranted = ::openInternal,
+        onDenied = { setState(com.sik.comm.internal.state.ChannelState.Closed) }
     )
 
-    @Volatile
-    private var handle: Long = 0L
-
-    @Volatile
-    private var userReceiver: CommReceiver? = null
-
-    private var ioJob: Job? = null
-
     private val pipeline: CommReceiver? by lazy {
-        val policy = config.qrAssemblePolicy ?: return@lazy userReceiver
+        val policy = config.qrAssemblePolicy ?: return@lazy currentReceiver
         ReceivePipeline(
             stages = listOf(QrAssembleStage(policy, scope)),
-            finalReceiver = userReceiver
+            finalReceiver = currentReceiver
         )
     }
 
     override fun setReceiver(receiver: CommReceiver?) {
-        this.userReceiver = receiver
+        currentReceiver = receiver
     }
 
     override fun open() {
         if (isOpen()) return
+        if (!tryTransition(com.sik.comm.internal.state.ChannelState.Closed, com.sik.comm.internal.state.ChannelState.Opening)) return
 
         val device = com.sik.comm.NativeUsbSerial.findDevice(appContext, config.deviceMatcher)
         if (device == null) {
             Log.e(TAG, "open: no matched device (id=$id)")
+            setState(com.sik.comm.internal.state.ChannelState.Closed)
             return
         }
 
@@ -85,34 +72,32 @@ internal class UsbSerialChannelImpl(
 
     private fun openInternal() {
         if (isOpen()) return
-        val h = transport.open(config)
+        val h = doOpen()
         if (h <= 0L) {
-            Log.e(TAG, "openInternal: transport.open failed (id=$id)")
+            Log.e(TAG, "openInternal: doOpen failed (id=$id)")
+            setState(com.sik.comm.internal.state.ChannelState.Closed)
             return
         }
-        handle = h
-        ioJob = looper.start(scope, h) { pipeline ?: userReceiver }
+        setState(com.sik.comm.internal.state.ChannelState.Open(h))
+        onOpened(h)
     }
 
-    override fun close() {
+    override fun doOpen(): Long = transport.open(config)
+
+    override fun onOpened(handle: Long) {
+        ioJob = looper.start(scope, handle) { pipeline ?: currentReceiver }
+    }
+
+    override fun doClose(handle: Long) {
         ioJob?.cancel()
         ioJob = null
-
         looper.shutdown()
-
-        if (handle != 0L) {
-            transport.close(handle)
-            handle = 0L
-        }
-
+        transport.close(handle)
         permissionBroker.dispose()
-        scope.cancel()
     }
 
-    override fun isOpen(): Boolean = handle != 0L
-
     override suspend fun send(bytes: ByteArray, timeoutMs: Int?): Int {
-        check(isOpen()) { "UsbSerialChannelImpl#send called when not open (id=$id)" }
+        val handle = requireHandle()
         return looper.send(bytes, timeoutMs ?: config.writeTimeoutMs)
     }
 

@@ -1,5 +1,9 @@
 package com.sik.comm
 
+import com.sik.comm.internal.channel.CanChannelImpl
+import com.sik.comm.internal.channel.SerialChannelImpl
+import com.sik.comm.internal.channel.UsbHidChannelImpl
+import com.sik.comm.internal.channel.UsbSerialChannelImpl
 import com.sik.comm.internal.factory.ChannelFactory
 import com.sik.comm.internal.factory.ChannelRegistry
 
@@ -17,7 +21,6 @@ import com.sik.comm.internal.factory.ChannelRegistry
 object SikComm {
 
     init {
-        // 注册内置通道工厂
         ChannelRegistry.register(SerialConfig::class, ChannelFactory { SerialChannelImpl(it as SerialConfig) })
         ChannelRegistry.register(CanConfig::class, ChannelFactory { CanChannelImpl(it as CanConfig) })
         ChannelRegistry.register(UsbSerialConfig::class, ChannelFactory { UsbSerialChannelImpl(it as UsbSerialConfig) })

@@ -1,37 +1,28 @@
-package com.sik.comm
+package com.sik.comm.internal.channel
 
 import android.content.Context
 import android.hardware.usb.UsbDevice
 import android.util.Log
+import com.sik.comm.CommReceiver
+import com.sik.comm.UsbHidConfig
 import com.sik.comm.internal.ioloop.HalfDuplexIoLooper
 import com.sik.comm.internal.transport.AndroidUsbHidTransport
 import com.sik.comm.internal.transport.Transport
 import com.sik.comm.internal.usb.UsbPermissionBroker
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * USB-HID 通道实现。
- *
- * 特性：
- * - 半双工读优先 IO 调度
- * - 内置 USB 权限管理
- * - HID read 返回 -1 很常见，内部按 timeout 处理并抑制高频日志
  */
 internal class UsbHidChannelImpl(
     private val config: UsbHidConfig,
     transportOverride: Transport? = null
-) : CommChannel {
+) : BaseCommChannel(config.id) {
 
     companion object {
         private const val TAG = "SIKComm-HID"
     }
-
-    override val id: String get() = config.id
 
     private val appContext: Context = config.context.applicationContext
 
@@ -40,35 +31,41 @@ internal class UsbHidChannelImpl(
     private val looper = HalfDuplexIoLooper(
         transport = transport,
         readTimeoutMs = config.readTimeoutMs,
-        readErrorFilter = { true },  // HID 读错误一律继续循环
-        onReadSuccess = { negCounter.set(0) }  // 读成功时重置负值计数
+        readErrorFilter = { true },
+        onReadSuccess = { negCounter.set(0) }
     )
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    private var ioJob: Job? = null
 
     private val permissionBroker = UsbPermissionBroker(
         context = appContext,
         actionSuffix = "SIKCOMM_USB_PERMISSION_HID.$id",
-        onGranted = ::openInternal
+        onGranted = ::openInternal,
+        onDenied = { setState(com.sik.comm.internal.state.ChannelState.Closed) }
     )
 
-    @Volatile
-    private var handle: Long = 0L
+    override fun doOpen(): Long = transport.open(config)
 
-    @Volatile
-    private var receiver: CommReceiver? = null
+    override fun onOpened(handle: Long) {
+        ioJob = looper.start(scope, handle) { currentReceiver }
+    }
 
-    private var ioJob: Job? = null
-
-    override fun setReceiver(receiver: CommReceiver?) {
-        this.receiver = receiver
+    override fun doClose(handle: Long) {
+        ioJob?.cancel()
+        ioJob = null
+        looper.shutdown()
+        transport.close(handle)
+        permissionBroker.dispose()
     }
 
     override fun open() {
         if (isOpen()) return
+        if (!tryTransition(com.sik.comm.internal.state.ChannelState.Closed, com.sik.comm.internal.state.ChannelState.Opening)) return
 
         val device = com.sik.comm.NativeUsbHid.findDevice(appContext, config.deviceMatcher)
         if (device == null) {
             Log.e(TAG, "open: no matched device (id=$id)")
+            setState(com.sik.comm.internal.state.ChannelState.Closed)
             return
         }
 
@@ -81,34 +78,18 @@ internal class UsbHidChannelImpl(
 
     private fun openInternal() {
         if (isOpen()) return
-        val h = transport.open(config)
+        val h = doOpen()
         if (h <= 0L) {
-            Log.e(TAG, "openInternal: transport.open failed (id=$id)")
+            Log.e(TAG, "openInternal: doOpen failed (id=$id)")
+            setState(com.sik.comm.internal.state.ChannelState.Closed)
             return
         }
-        handle = h
-        ioJob = looper.start(scope, h) { receiver }
+        setState(com.sik.comm.internal.state.ChannelState.Open(h))
+        onOpened(h)
     }
-
-    override fun close() {
-        ioJob?.cancel()
-        ioJob = null
-
-        looper.shutdown()
-
-        if (handle != 0L) {
-            transport.close(handle)
-            handle = 0L
-        }
-
-        permissionBroker.dispose()
-        scope.cancel()
-    }
-
-    override fun isOpen(): Boolean = handle != 0L
 
     override suspend fun send(bytes: ByteArray, timeoutMs: Int?): Int {
-        check(isOpen()) { "UsbHidChannelImpl#send called when not open (id=$id)" }
+        val handle = requireHandle()
         return looper.send(bytes, timeoutMs ?: config.writeTimeoutMs)
     }
 }

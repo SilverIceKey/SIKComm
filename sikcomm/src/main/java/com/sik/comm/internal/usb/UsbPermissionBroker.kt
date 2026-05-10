@@ -23,7 +23,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 internal class UsbPermissionBroker(
     context: Context,
     private val actionSuffix: String,
-    private val onGranted: () -> Unit
+    private val onGranted: () -> Unit,
+    private val onDenied: (() -> Unit)? = null
 ) {
 
     companion object {
@@ -42,7 +43,7 @@ internal class UsbPermissionBroker(
             val granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)
             val device = intent.getParcelableExtra<UsbDevice>(UsbManager.EXTRA_DEVICE)
             Log.i(TAG, "permission result granted=$granted device=${device?.deviceName}")
-            if (granted) onGranted()
+            if (granted) onGranted() else onDenied?.invoke()
         }
     }
 
