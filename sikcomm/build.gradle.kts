@@ -10,7 +10,6 @@ android {
 
     defaultConfig {
         minSdk = 24
-        targetSdk = 35
         externalNativeBuild {
             cmake {
                 cppFlags += ""
@@ -45,7 +44,7 @@ publishing {
 
             pom {
                 name.set("SIKComm")
-                description.set("Ble蓝牙+modbus的工具库")
+                description.set("SIKComm - Android Serial / SocketCAN / USB-Serial / USB-HID 统一通信框架")
                 url.set("https://github.com/SilverIceKey/SIKComm")
 
                 licenses {
