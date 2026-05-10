@@ -77,5 +77,9 @@ publishing {
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation("com.github.felHR85:UsbSerial:6.1.0")
+
+    testImplementation(libs.junit)
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
+    testImplementation("org.mockito:mockito-core:5.14.2")
 }
 
