@@ -9,6 +9,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.isActive
 import java.util.concurrent.atomic.AtomicReference
 
 /**
@@ -30,8 +31,9 @@ internal abstract class BaseCommChannel(
     override val id: String
 ) : CommChannel {
 
-    protected val scope: CoroutineScope =
+    protected var scope: CoroutineScope =
         CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        private set
 
     private val stateRef = AtomicReference<ChannelState>(ChannelState.Closed)
 
@@ -93,6 +95,12 @@ internal abstract class BaseCommChannel(
                 is ChannelState.Closed,
                 is ChannelState.Failed -> {
                     if (!tryTransition(current, ChannelState.Opening)) continue
+
+                    // 若 scope 已取消（例如之前 close 过），重新创建，支持 reopen
+                    if (!scope.isActive) {
+                        scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+                    }
+
                     try {
                         val handle = doOpen()
                         if (handle > 0L) {
@@ -102,10 +110,12 @@ internal abstract class BaseCommChannel(
                         } else {
                             val error = CommException.OpenFailed(id, handle)
                             transitionState(ChannelState.Failed(error))
+                            scope.cancel()
                             throw error
                         }
                     } catch (e: Throwable) {
                         transitionState(ChannelState.Failed(e))
+                        scope.cancel()
                         throw e
                     }
                 }

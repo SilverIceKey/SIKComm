@@ -72,6 +72,6 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-//        UsbScanHelper.release()
+        UsbScanHelper.release()
     }
 }

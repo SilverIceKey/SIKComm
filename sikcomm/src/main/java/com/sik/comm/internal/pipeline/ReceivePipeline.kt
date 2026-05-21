@@ -9,8 +9,12 @@ import com.sik.comm.CommReceiver
  */
 internal class ReceivePipeline(
     private val stages: List<PipelineStage>,
-    private val finalReceiver: CommReceiver?
+    private var finalReceiver: CommReceiver?
 ) : CommReceiver {
+
+    fun setFinalReceiver(receiver: CommReceiver?) {
+        finalReceiver = receiver
+    }
 
     override fun onBytesReceived(data: ByteArray, offset: Int, length: Int) {
         if (stages.isEmpty()) {

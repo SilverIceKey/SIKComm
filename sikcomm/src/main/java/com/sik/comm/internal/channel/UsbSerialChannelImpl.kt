@@ -43,16 +43,11 @@ internal class UsbSerialChannelImpl(
         onDenied = { transitionState(com.sik.comm.internal.state.ChannelState.Closed) }
     )
 
-    private val pipeline: CommReceiver? by lazy {
-        val policy = config.qrAssemblePolicy ?: return@lazy currentReceiver
-        ReceivePipeline(
-            stages = listOf(QrAssembleStage(policy, scope)),
-            finalReceiver = currentReceiver
-        )
-    }
+    private var pipeline: ReceivePipeline? = null
 
     override fun setReceiver(receiver: CommReceiver?) {
         currentReceiver = receiver
+        pipeline?.setFinalReceiver(receiver)
     }
 
     override fun open() {
@@ -85,6 +80,12 @@ internal class UsbSerialChannelImpl(
     override fun doOpen(): Long = transport.open(config)
 
     override fun onOpened(handle: Long) {
+        pipeline = if (config.qrAssemblePolicy != null) {
+            ReceivePipeline(
+                stages = listOf(QrAssembleStage(config.qrAssemblePolicy, scope)),
+                finalReceiver = currentReceiver
+            )
+        } else null
         ioJob = looper.start(scope, handle) { pipeline ?: currentReceiver }
     }
 

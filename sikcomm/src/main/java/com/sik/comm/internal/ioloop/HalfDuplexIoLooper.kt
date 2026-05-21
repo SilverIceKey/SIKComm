@@ -95,9 +95,10 @@ internal class HalfDuplexIoLooper(
     }
 
     /**
-     * 清空写队列，取消所有挂起的写入请求。
+     * 清空写队列，取消所有挂起的写入请求，并关闭 Channel 防止后续数据堆积。
      */
     fun shutdown() {
+        writeQueue.close()
         while (true) {
             val job = writeQueue.tryReceive().getOrNull() ?: break
             job.result.completeExceptionally(

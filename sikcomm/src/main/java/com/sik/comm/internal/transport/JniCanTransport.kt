@@ -22,12 +22,13 @@ internal class JniCanTransport : Transport {
     override fun open(config: CommConfig): Long {
         val c = config as CanConfig
         val bitrate = c.bitrate
-        if (bitrate != null) {
-            NativeCan.bringUp(c.ifName, bitrate, c.fdMode)
-        }
+        val broughtUp = bitrate != null && NativeCan.bringUp(c.ifName, bitrate, c.fdMode) == 0
         val fd = NativeCan.open(c.ifName)
         if (fd <= 0L) {
             Log.e(TAG, "open failed: ifName=${c.ifName}, fd=$fd")
+            if (broughtUp) {
+                NativeCan.bringDown(c.ifName)
+            }
         }
         return fd
     }

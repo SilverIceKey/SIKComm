@@ -43,6 +43,7 @@ object UsbScanHelper {
             if (commChannel?.isOpen() == true) commChannel?.close()
         } finally {
             commChannel = null
+            pendingReceiver = null
         }
         Log.i(TAG, "UsbScanHelper.release")
     }

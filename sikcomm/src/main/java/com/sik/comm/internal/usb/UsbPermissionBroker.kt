@@ -40,6 +40,13 @@ internal class UsbPermissionBroker(
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action != permissionAction) return
+
+            // 安全网：若已被 dispose，主动自我注销，防止被丢弃时泄漏
+            if (disposed.get()) {
+                try { appContext.unregisterReceiver(this) } catch (_: Throwable) {}
+                return
+            }
+
             val granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)
             val device = intent.getParcelableExtra<UsbDevice>(UsbManager.EXTRA_DEVICE)
             Log.i(TAG, "permission result granted=$granted device=${device?.deviceName}")
